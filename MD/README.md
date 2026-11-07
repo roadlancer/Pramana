@@ -56,11 +56,11 @@ cd Pramana
 # install
 pnpm install
 
-# dev build (loads unpacked into Chrome)
-pnpm dev
-
-# production build
+# build into dist/ (load it unpacked in Chrome)
 pnpm build
+
+# Chrome Web Store package: release/pramana-<version>.zip (see MD/PUBLISHING.md)
+pnpm package
 
 # run tests
 pnpm test

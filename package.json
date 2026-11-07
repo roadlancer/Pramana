@@ -1,13 +1,12 @@
 {
   "name": "pramana",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build && vite build -c vite.content.config.ts && node scripts/generate-manifest.js",
+    "package": "pnpm build && node scripts/package.js",
     "lint": "oxlint",
-    "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",

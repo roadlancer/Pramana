@@ -76,23 +76,6 @@ These need a real signed-in Chrome profile and Google account:
 
 ## CI Pipeline
 
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: cp .env.example .env && pnpm build
-      - run: npx playwright install chromium && node e2e/run.mjs
-```
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every push and pull request: install, lint, typecheck, unit tests,
+then the end-to-end run in Playwright's Chromium. CI builds with `.env.example`'s placeholder OAuth client, which is enough because
+Google is faked in the end-to-end run.

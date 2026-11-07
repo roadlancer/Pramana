@@ -11,7 +11,7 @@
 | `scripting` | Inject the area-selection script with `chrome.scripting.executeScript` | Only on the Select Area click; no content script is declared in the manifest |
 | `tabCapture` | Record the current tab | Only on the Record Tab click |
 | `offscreen` | Keep a tab recording running after the popup closes | Document exists only while recording |
-| `storage` | Auth state, the screenshot waiting in the editor, recording state, the mic preference | No browsing data is stored |
+| `storage` | Auth state, the screenshot waiting in the editor, recording state, the mic and format preferences | No browsing data is stored |
 
 Host permission: `https://www.googleapis.com/*` only, to call the Drive API.
 
@@ -36,7 +36,7 @@ Screen recording uses the standard web share picker (`getDisplayMedia`) in a Pra
 - **`scripting`**: Injects the area-selection overlay and editor into the current tab when the user clicks Select Area. Nothing is injected otherwise.
 - **`tabCapture`**: Records the current tab when the user clicks Record Tab.
 - **`offscreen`**: Runs the tab recorder in a hidden extension document so a recording continues after the popup closes.
-- **`storage`**: Keeps sign-in state, a screenshot that is open in the editor, the in-progress recording state, and the microphone preference.
+- **`storage`**: Keeps sign-in state, a screenshot that is open in the editor, the in-progress recording state, and the microphone and video-format preferences.
 
 ## Microphone
 

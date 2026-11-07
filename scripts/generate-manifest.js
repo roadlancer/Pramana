@@ -16,6 +16,14 @@ envContent.split('\n').forEach(line => {
   }
 });
 
+// --store: the Chrome Web Store assigns the extension ID, so a store upload carries no "key"
+const forStore = process.argv.includes('--store');
+const { version } = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf-8'));
+
+// Pins the extension ID for unpacked builds, so the OAuth client works during development.
+// Set VITE_EXTENSION_KEY to the store item's public key to give dev builds the store's ID.
+const DEV_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtyllFskxE9Rsg3Jz9AYJfLH7iOj3wSUonoENlpAME8gtenpTRkNbxdF42wH027OUmHBz5Dm40lxO9IOucPiz8nEZnWQSzBFgVmqTW2RvGl0geVcYar/quKC1iS5hAtU0CC+/wXBFKNN9ti8oM0vbPgWlg8oJ22p8YlqkQxnqFTu0nZx3m7j1iZ/M976n9QxDV565B2xthO105oJB9CCAmG1uAhckHW4o5ksArmLxoFmx/RHclQI3WKHqcxIFVjFPpak2oA5ykcyFvYXcdyb85edQ3fCaMRtvru1EQzm88pavPbS6/Ki3p9FmJACqSZUwuhgQ8wOw3vFH+atjX8tQfwIDAQAB";
+
 const clientId = envVars['VITE_GOOGLE_CLIENT_ID'];
 if (!clientId) {
   console.error('VITE_GOOGLE_CLIENT_ID not found in .env');
@@ -25,8 +33,8 @@ if (!clientId) {
 const manifestTemplate = {
   manifest_version: 3,
   name: "Pramana",
-  version: "0.1.0",
-  key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtyllFskxE9Rsg3Jz9AYJfLH7iOj3wSUonoENlpAME8gtenpTRkNbxdF42wH027OUmHBz5Dm40lxO9IOucPiz8nEZnWQSzBFgVmqTW2RvGl0geVcYar/quKC1iS5hAtU0CC+/wXBFKNN9ti8oM0vbPgWlg8oJ22p8YlqkQxnqFTu0nZx3m7j1iZ/M976n9QxDV565B2xthO105oJB9CCAmG1uAhckHW4o5ksArmLxoFmx/RHclQI3WKHqcxIFVjFPpak2oA5ykcyFvYXcdyb85edQ3fCaMRtvru1EQzm88pavPbS6/Ki3p9FmJACqSZUwuhgQ8wOw3vFH+atjX8tQfwIDAQAB",
+  version,
+  ...(forStore ? {} : { key: envVars['VITE_EXTENSION_KEY'] || DEV_KEY }),
   description: "Capture, edit, store, organize, and share screenshots and recordings — all from your own Google Drive.",
   permissions: [
     "identity",
@@ -78,4 +86,4 @@ if (!existsSync(distDir)) {
 }
 
 writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifestTemplate, null, 2));
-console.log('manifest.json generated with client ID:', clientId.substring(0, 20) + '...');
+console.log(`manifest.json ${version}${forStore ? ' (store, no key)' : ''} generated with client ID:`, clientId.substring(0, 20) + '...');

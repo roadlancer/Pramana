@@ -31,3 +31,6 @@ dist-ssr
 # End-to-end test output
 e2e/.artifacts/
 coverage/
+
+# Store packages (pnpm package)
+release/

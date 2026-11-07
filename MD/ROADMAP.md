@@ -106,10 +106,23 @@
 - [x] Recording format choice: MP4 (default) or WebM; share picker opens immediately on Entire screen
 - [x] 151 tests + `pnpm test:e2e` headless end-to-end run (incl. tab switching and closing the recorded tab)
 
-### Phase 9 — Release ⬜ Not Started
-- [ ] Privacy policy drafting
-- [ ] User documentation
-- [ ] Chrome Web Store listing & publishing
+### Phase 8.7 — Polish ✅ Complete
+- [x] Copy image to the clipboard (editor, popup preview, Library)
+- [x] Recording stays off screen: popup closes, recorder window minimizes; Pause/Resume/Stop on the toolbar icon and Alt+Shift+P / Alt+Shift+S (Option on Mac)
+- [x] Redesigned popup that fits without scrolling
+- [x] Help page: what each OS shows when recording, Mac permission, Ubuntu commands to remove the pop-ups (tested), with undo
+- [x] 196 tests + 12 end-to-end scenarios
+
+### Phase 9 — Release 🟡 In Progress
+- [x] Privacy policy (`docs/privacy-policy.html`, for GitHub Pages)
+- [x] Store listing text and data-usage answers ([STORE_LISTING.md](STORE_LISTING.md))
+- [x] `pnpm package`: checked store zip without the dev `key`; version 1.0.0
+- [x] Publishing guide ([PUBLISHING.md](PUBLISHING.md)) and GitHub Actions CI
+- [x] User documentation: in-extension Help page
+- [ ] Manual checks on a real Google account, plus one Windows and one Mac machine
+- [ ] Developer account, store item, OAuth client for the store ID, consent screen in production
+- [ ] Store screenshots (1280×800) and promo tile (440×280)
+- [ ] Submit for review
 
 ## What's Working Now
 
@@ -121,10 +134,12 @@
 | Editor | ✅ | One object-based editor for page modal and editor tab; 9 tools; inline text; strong blur; shortcuts |
 | Upload to Drive | ✅ | Multipart ≤ 5 MB, resumable above |
 | Tab recording | ✅ | Offscreen document, tab audio, optional mic, 10-minute limit, review before saving |
-| Screen recording | ✅ | Share picker in a small recorder window |
+| Screen recording | ✅ | Recorder window opens Chrome's picker on Entire screen, then minimizes; pause/resume; shortcuts |
 | Library | ✅ | Sign-in gate, search, tabs, sort, thumbnails, image/video preview, rename, download, trash |
+| Copy image | ✅ | Editor, popup preview, Library |
+| Help page | ✅ | Per-OS recording guide; Ubuntu pop-up removal commands |
 | Sharing | ✅ | Share link, copy link, stop sharing, open in Drive |
-| Test suite | ✅ | 139 tests + headless end-to-end run |
+| Test suite | ✅ | 196 tests + 12 headless end-to-end scenarios; GitHub Actions CI |
 
 ## Future Roadmap (Post-MVP)
 
