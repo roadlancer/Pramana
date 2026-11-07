@@ -4,6 +4,8 @@
 // Screen recordings run in a small visible recorder window: Chrome's share picker needs a
 // page to open from, and the stream it returns only works in that page.
 
+import { shortcutLabels } from '../shared/platform';
+
 export const OFFSCREEN_PATH = 'src/offscreen/index.html';
 export const RECORDER_PATH = 'src/recorder/index.html';
 export const MAX_RECORDING_MS = 10 * 60 * 1000;
@@ -65,7 +67,8 @@ async function closeRecorderWindow() {
   if (windowId) await chrome.windows.remove(windowId).catch(() => {});
 }
 
-const SHORTCUTS = 'Alt+Shift+P pause/resume, Alt+Shift+S stop';
+const KEYS = shortcutLabels();
+const SHORTCUTS = `${KEYS.pause} pause/resume, ${KEYS.stop} stop`;
 
 // The toolbar icon is the recording's only on-screen sign: badge, plus the tooltip on hover
 async function setRecordingBadge(mode: 'recording' | 'paused' | 'off') {

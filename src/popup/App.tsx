@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { formatDuration, recordedSeconds } from '../shared/utils';
 import { StorageMeter } from '../shared/StorageMeter';
 import { copyImageToClipboard } from '../shared/clipboard';
+import { shortcutLabels } from '../shared/platform';
 import type { StorageQuota } from '../shared/drive';
 
 type RecordingState = { startedAt: number; source: 'tab' | 'screen'; pausedAt?: number | null; pausedMs?: number };
@@ -13,6 +14,7 @@ const MAX_RECORDING_SECONDS = 600;
 const MIC_PREF_KEY = 'record_mic';
 const FORMAT_PREF_KEY = 'record_format';
 type RecordingFormat = 'mp4' | 'webm';
+const SHORTCUTS = shortcutLabels();
 
 function sendMessage<T = any>(message: unknown): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -350,18 +352,18 @@ function App() {
               {recording.pausedAt ? '❚❚ Paused' : '● Recording'} {formatDuration(elapsed)} / {formatDuration(MAX_RECORDING_SECONDS)}
             </p>
             <div className="tile-grid">
-              <button className="tile" onClick={togglePause} title="Alt+Shift+P">
+              <button className="tile" onClick={togglePause} title={SHORTCUTS.pause}>
                 <span className="tile-icon">{recording.pausedAt ? '▶️' : '⏸️'}</span>
                 <span className="tile-text">
                   <span className="tile-title">{recording.pausedAt ? 'Resume' : 'Pause'}</span>
-                  <span className="tile-hint">Alt+Shift+P</span>
+                  <span className="tile-hint">{SHORTCUTS.pause}</span>
                 </span>
               </button>
-              <button className="tile tile-stop" onClick={stopRecording} title="Alt+Shift+S">
+              <button className="tile tile-stop" onClick={stopRecording} title={SHORTCUTS.stop}>
                 <span className="tile-icon">⏹️</span>
                 <span className="tile-text">
                   <span className="tile-title">Stop</span>
-                  <span className="tile-hint">Alt+Shift+S</span>
+                  <span className="tile-hint">{SHORTCUTS.stop}</span>
                 </span>
               </button>
             </div>

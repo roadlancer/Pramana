@@ -10,6 +10,7 @@ import { FileCard } from './FileCard';
 import { PreviewModal } from './PreviewModal';
 import { RecordingReview } from './RecordingReview';
 import { MicPermission } from './MicPermission';
+import { Help } from './Help';
 
 const drive = createPageDriveClient();
 
@@ -30,6 +31,7 @@ const loadImage = (fileId: string) => drive.fetchBlob(fileId);
 function App() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('grant') === 'microphone') return <MicPermission />;
+  if (params.has('help')) return <Help />;
   return <Library />;
 }
 
@@ -115,11 +117,16 @@ function Library() {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>Pramana Library</h1>
-        {quota && (
-          <div className="dashboard-storage">
-            <StorageMeter quota={quota} />
-          </div>
-        )}
+        <div className="dashboard-header-actions">
+          {quota && (
+            <div className="dashboard-storage">
+              <StorageMeter quota={quota} />
+            </div>
+          )}
+          <a className="btn-ghost" href="?help">
+            Help
+          </a>
+        </div>
       </header>
 
       <div className="controls">

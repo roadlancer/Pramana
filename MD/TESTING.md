@@ -29,7 +29,7 @@ Global mocks for `chrome.*`, `IntersectionObserver` and the 2D canvas live in `s
 src/
 ├── background/__tests__/   auth, capture, index (router), recording, storage
 ├── content/__tests__/      overlay Escape, single injection, crop scaling
-├── dashboard/__tests__/    Library: list, sign-in gate, retry, filters/sort, video, trash dialog, share, rename, recording review, mic page
+├── dashboard/__tests__/    Ubuntu Help commands run against temp copies of the real files; Library: Help page, list, sign-in gate, retry, filters/sort, video, trash dialog, share, rename, recording review, mic page
 ├── editor/__tests__/       editor page (save/keep pending image, StrictMode), pendingEdits cleanup
 ├── offscreen/__tests__/    tab recorder: capture size, start/stop/limit/ended/mic mixing/failures
 ├── popup/__tests__/        storage meter, capture + save, recording start/stop/state, mic permission
@@ -39,7 +39,7 @@ src/
     └── editor/__tests__/   createEditor behaviour, elements, constants
 ```
 
-**Current: 185 tests in 18 files, all passing.**
+**Current: 196 tests in 20 files, all passing.**
 
 ## End-to-End Run
 
@@ -57,6 +57,7 @@ src/
 | Close the recorded tab | Recording stops and what was captured opens for review; this one is recorded as WebM via the popup's Format menu |
 | Library | Thumbnails, sort, preview, rename, share/unshare, download, trash via in-page dialog |
 | Recorded video | Plays in preview |
+| Help page | Recording guide, Mac permission, Ubuntu commands with undo |
 | Signed out | Sign-in prompt instead of "No files" |
 | Microphone page | `E2E_FAKE_MEDIA=1` only (fake devices disable tab capture) |
 

@@ -90,6 +90,7 @@ Copy `.env.example` to `.env` and set `VITE_GOOGLE_CLIENT_ID` before building; `
 | One object-based editor for both the page modal and the editor tab: 9 tools incl. Select, inline text, strong blur, undo/redo, shortcuts | Working |
 | Editor keeps the screenshot across a refresh | Working |
 | Copy image to clipboard (editor, popup preview, Library) | Working |
+| Help page (Library → Help): what each OS shows when recording, Mac permission, Ubuntu commands to remove the pop-ups (with undo) | Working |
 | Recording stays off screen: popup closes, recorder window minimizes; Pause/Resume/Stop from the toolbar icon or Alt+Shift+P / Alt+Shift+S | Working |
 | Tab recording in an offscreen document (keeps going after the popup closes and when you switch tabs), tab audio, optional microphone, 10-minute limit, recorded at the tab's own size | Working |
 | Screen/window/tab recording: Chrome's share picker opens straight away on Entire screen | Working |

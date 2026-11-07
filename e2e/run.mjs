@@ -689,6 +689,16 @@ await scenario('Library: recorded video plays in the preview', async () => {
   await shot(lib, '15-video-preview');
 });
 
+await scenario('Help page: recording guide, Mac permission, Ubuntu commands with undo', async () => {
+  const h = await open(`${EXT_URL}/src/dashboard/index.html?help=ubuntu`);
+  const text = await waitFor(async () => { const t = await textOf(h); return t.includes('Pramana Help') && t; }, { what: 'help page' });
+  for (const part of ["Ubuntu: remove the screen-sharing pop-ups", 'WaylandEnable=false', '--auto-select-desktop-capture-source', 'Undo', 'Mac: allow screen recording']) {
+    assert(text.includes(part), `help page is missing "${part}"`);
+  }
+  await shot(h, '17-help');
+  await cdp.send('Target.closeTarget', { targetId: sessions.get(h).targetId });
+});
+
 await scenario('Library asks to sign in when signed out', async () => {
   const lib = await open(`${EXT_URL}/src/dashboard/index.html`);
   await evaluate(lib, `chrome.storage.local.set({ is_signed_in: false })`);

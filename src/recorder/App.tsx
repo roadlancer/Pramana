@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { recordStream } from '../shared/captureRecorder';
 import type { ActiveRecording, RecordingFormat } from '../shared/captureRecorder';
 import { formatDuration, recordedSeconds } from '../shared/utils';
+import { detectOS, shortcutLabels } from '../shared/platform';
 
 // Screen recording needs a visible page: Chrome's share picker can't open from the background
 // worker, and the stream it returns only works in the page that asked for it.
@@ -11,7 +12,11 @@ import { formatDuration, recordedSeconds } from '../shared/utils';
 const DEFAULT_MAX_MS = 10 * 60 * 1000;
 
 // On Linux, the desktop (e.g. Ubuntu on Wayland) shows its own Share Screen dialog after Chrome's
-const isLinux = /linux/i.test(navigator.userAgent) && !/android|cros/i.test(navigator.userAgent);
+const os = detectOS();
+const isLinux = os === 'linux';
+const keys = shortcutLabels(os);
+
+const openHelp = (section: string) => chrome.tabs.create({ url: chrome.runtime.getURL(`src/dashboard/index.html?help=${section}`) });
 
 function ShareSteps() {
   return (
@@ -21,7 +26,13 @@ function ShareSteps() {
       </li>
       {isLinux && (
         <li>
-          If your system asks too (Ubuntu's <strong>Share Screen</strong> window), pick your display and click <strong>Share</strong>.
+          If your system asks too (Ubuntu's <strong>Share Screen</strong> window), pick your display and click <strong>Share</strong>.{' '}
+          <a href="#" className="recorder-help-link" onClick={(e) => {
+              e.preventDefault();
+              openHelp('ubuntu');
+            }}>
+            Stop seeing these windows
+          </a>
         </li>
       )}
     </ol>
@@ -30,7 +41,11 @@ function ShareSteps() {
 
 function cancelMessage(error: DOMException) {
   // Chrome reports a denial by the operating system as "Permission denied by system"
-  if (/system/i.test(error.message)) return 'Your system did not allow screen sharing. Click Share in its window when it asks.';
+  if (/system/i.test(error.message)) {
+    return os === 'mac'
+      ? 'macOS did not allow screen recording. In System Settings → Privacy & Security → Screen Recording, turn on Google Chrome, then restart Chrome.'
+      : 'Your system did not allow screen sharing. Click Share in its window when it asks.';
+  }
   return isLinux ? 'Nothing was shared. Click Share in both windows to start recording.' : 'Nothing was shared. Click Share in Chrome\'s window to start recording.';
 }
 
@@ -174,7 +189,7 @@ function App() {
           </p>
           {phase.warning && <p className="notice notice-info">{phase.warning}</p>}
           <p>
-            Controls are on the Pramana icon in Chrome's toolbar, or use Alt+Shift+P (pause) and Alt+Shift+S (stop). Keep this
+            Controls are on the Pramana icon in Chrome's toolbar, or use {keys.pause} (pause) and {keys.stop} (stop). Keep this
             window open (minimized is fine): closing it discards the recording.
           </p>
           <button className="btn-ghost" onClick={togglePause}>

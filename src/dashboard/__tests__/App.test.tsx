@@ -185,6 +185,25 @@ describe('Dashboard App', () => {
     await waitFor(() => expect(drive.upload).toHaveBeenCalledWith(expect.any(Blob), { name: 'demo-for-client.mp4', kind: 'recording' }, expect.any(Function)));
   });
 
+  it('shows the Help page with copyable Ubuntu commands', async () => {
+    window.history.replaceState(null, '', '/?help=ubuntu');
+    Element.prototype.scrollIntoView = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<App />);
+
+    expect(screen.getByText('Ubuntu: remove the screen-sharing pop-ups')).toBeInTheDocument();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    fireEvent.click(screen.getAllByText('Copy')[0]);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('WaylandEnable=false')));
+    expect(await screen.findByText('Copied ✓')).toBeInTheDocument();
+  });
+
+  it('links to Help from the Library', async () => {
+    render(<App />);
+    expect(await screen.findByText('Help')).toHaveAttribute('href', '?help');
+  });
+
   it('shows the microphone permission page when asked', async () => {
     window.history.replaceState(null, '', '/?grant=microphone');
     render(<App />);

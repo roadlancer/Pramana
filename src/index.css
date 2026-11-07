@@ -298,6 +298,105 @@ body {
   padding: 24px;
 }
 
+.dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Help page */
+.help-page {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 32px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #cfd2dc;
+}
+
+.help-section h2 {
+  font-size: 18px;
+  color: #eaeaea;
+}
+
+.help-section h3 {
+  margin-top: 8px;
+  font-size: 15px;
+  color: #eaeaea;
+}
+
+.help-section code,
+.help-section kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.help-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.help-command code {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #7ee787;
+}
+
+.help-note {
+  font-size: 13px;
+  color: #8b8fa3;
+}
+
+.help-warning {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+}
+
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.help-table th,
+.help-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #2a2f45;
+  text-align: left;
+  vertical-align: top;
+}
+
+.help-table td:first-child {
+  color: #8b8fa3;
+  white-space: nowrap;
+}
+
+.recorder-help-link {
+  color: #a5c8ff;
+  font-size: 12px;
+}
+
 .dashboard-header {
   display: flex;
   justify-content: space-between;
