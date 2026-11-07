@@ -23,7 +23,7 @@ the development manifest, so the unpacked extension keeps working.
 
 ## 3. Publish the privacy policy
 
-1. Replace `SUPPORT_EMAIL` in `docs/privacy-policy.html` with the support address.
+1. The support address in `docs/privacy-policy.html` and `docs/index.html` is shivamsahaniii17@gmail.com.
 2. Push to GitHub, then in the repository: **Settings → Pages → Deploy from a branch → `main` / `/docs`**. (Free GitHub Pages needs a
    public repository; otherwise host the single HTML file anywhere.)
 3. The policy is then at `https://<user>.github.io/Pramana/privacy-policy.html`.
