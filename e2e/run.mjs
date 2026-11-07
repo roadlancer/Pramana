@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { CDP } from './cdp.mjs';
 import { createFakeDrive } from './fakeDrive.mjs';
 
@@ -34,7 +35,12 @@ function findChromium() {
 }
 const CHROME = findChromium();
 if (!existsSync(join(DIST, 'manifest.json'))) throw new Error('dist/ is missing. Run `pnpm build` first.');
-const EXT_ID = 'dolihaakilhbijbbknbanpangkaoedgh';
+// The extension ID follows from the manifest key (the dev key, or VITE_EXTENSION_KEY from .env)
+const EXT_ID = (() => {
+  const { key } = JSON.parse(readFileSync(join(DIST, 'manifest.json'), 'utf8'));
+  const hash = createHash('sha256').update(Buffer.from(key, 'base64')).digest('hex').slice(0, 32);
+  return [...hash].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+})();
 const EXT_URL = `chrome-extension://${EXT_ID}`;
 const WEB = 'http://127.0.0.1:5600';
 const only = process.argv[2];
