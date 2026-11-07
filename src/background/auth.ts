@@ -107,50 +107,25 @@ export async function checkAuthStatus() {
 }
 
 export async function getStoredToken(): Promise<string | null> {
-  try {
-    const token = await new Promise<string | null>((resolve) => {
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-        if (chrome.runtime.lastError || !token) {
-          resolve(null);
-        } else {
-          resolve(token);
-        }
-      });
+  const token = await new Promise<string | null>((resolve) => {
+    chrome.identity.getAuthToken({ interactive: false }, (token) => {
+      resolve(chrome.runtime.lastError || !token ? null : token);
     });
-    if (token) return token;
-  } catch {}
+  });
+  if (token) return token;
 
   const data = await chrome.storage.local.get(['auth_token']);
   return data.auth_token || null;
 }
 
-export async function checkStorageQuota(token: string) {
-  try {
-    const response = await fetch(
-      'https://www.googleapis.com/drive/v3/about?fields=storageQuota',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Drive API error:', data.error);
-      throw new Error(data.error.message || 'Failed to check storage quota');
-    }
-
-    const { limit, usage } = data.storageQuota;
-    const available = Number(limit) - Number(usage);
-    return {
-      limit: Number(limit),
-      usage: Number(usage),
-      available,
-      status: (available > 524288000 ? 'normal' : available > 0 ? 'warning' : 'full') as 'normal' | 'warning' | 'full',
-    };
-  } catch (error) {
-    console.error('Storage check failed:', error);
-    throw error;
+/** Token provider for the Drive client; `refresh` drops the rejected token so Chrome issues a new one. */
+export async function getToken(refresh = false): Promise<string | null> {
+  if (refresh) {
+    const stale = await getStoredToken();
+    if (stale) await chrome.identity.removeCachedAuthToken({ token: stale });
+    await chrome.storage.local.remove(['auth_token']);
   }
+  const token = await getStoredToken();
+  if (token) await chrome.storage.local.set({ auth_token: token });
+  return token;
 }

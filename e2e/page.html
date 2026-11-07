@@ -1,0 +1,20 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Acme Dashboard</title>
+<style>body{font-family:sans-serif;margin:0;padding:32px;background:#f6f7fb;color:#222}
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px;margin:16px 0}
+.secret{font-size:22px;font-weight:bold;letter-spacing:1px}
+/* hostile page styles the injected editor must not inherit */
+button{background:hotpink!important;font-size:30px!important}
+canvas{border:10px solid lime!important}</style></head>
+<body><h1>Acme Dashboard</h1>
+<div class="card">Account email: jane.doe@example.com</div>
+<div class="card secret">API key: sk_live_4f9a8b7c6d5e</div>
+<div class="card">Monthly revenue: $12,480</div>
+<script>
+  // Page shortcut that must not fire while the Pramana editor is open
+  window.pageKeys = [];
+  document.addEventListener('keydown', e => window.pageKeys.push(e.key));
+  // Page audio, so the tab recording has an audio track
+  let t = 0; const c = document.createElement('canvas'); c.width = 200; c.height = 60; c.style.border = '0';
+  document.body.appendChild(c); const x = c.getContext('2d');
+  setInterval(() => { x.fillStyle = `hsl(${t++ * 7 % 360},80%,50%)`; x.fillRect(0, 0, 200, 60); }, 50);
+</script></body></html>

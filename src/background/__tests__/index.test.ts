@@ -92,3 +92,54 @@ describe('Message handler routing', () => {
     );
   });
 });
+
+describe('Message handler responses', () => {
+  let handler: any;
+
+  const send = async (message: unknown, sender: object = { id: 'test-extension', url: 'chrome-extension://test/src/dashboard/index.html' }) => {
+    const sendResponse = vi.fn();
+    handler(message, sender, sendResponse);
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    return sendResponse.mock.calls[0][0];
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    (globalThis.chrome as any).runtime.onMessage.addListener = vi.fn((fn: any) => {
+      handler = fn;
+    });
+    (globalThis.chrome as any).runtime.onInstalled.addListener = vi.fn();
+    (globalThis.chrome as any).identity.getAuthToken = vi.fn((_opts: unknown, cb: (t: string) => void) => cb('test-token'));
+    await import('../index');
+  });
+
+  it('marks CHECK_STORAGE_QUOTA responses as successful', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ storageQuota: { limit: '1000', usage: '400' } }))));
+
+    expect(await send({ type: 'CHECK_STORAGE_QUOTA' })).toEqual(
+      expect.objectContaining({ success: true, limit: 1000, usage: 400 })
+    );
+  });
+
+  it('responds with an error instead of hanging when a handler throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+
+    expect(await send({ type: 'CHECK_STORAGE_QUOTA' })).toEqual({ success: false, error: 'Network error' });
+  });
+
+  it('gives the Google token to extension pages', async () => {
+    expect(await send({ type: 'GET_AUTH_TOKEN' })).toEqual({ success: true, token: 'test-token' });
+  });
+
+  it('never gives the Google token to content scripts on web pages', async () => {
+    const fromWebPage = { id: 'test-extension', url: 'https://example.com/', tab: { id: 1, url: 'https://example.com/' } };
+    expect(await send({ type: 'GET_AUTH_TOKEN' }, fromWebPage)).toEqual({ success: false, error: 'Not allowed' });
+  });
+
+  it('leaves messages addressed to the offscreen recorder alone', () => {
+    const sendResponse = vi.fn();
+    expect(handler({ target: 'offscreen', type: 'OFFSCREEN_STOP' }, {}, sendResponse)).toBe(false);
+    expect(sendResponse).not.toHaveBeenCalled();
+  });
+});

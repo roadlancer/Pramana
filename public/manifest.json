@@ -6,29 +6,22 @@
   "permissions": [
     "identity",
     "tabCapture",
-    "desktopCapture",
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "offscreen"
   ],
   "host_permissions": [
     "https://www.googleapis.com/*"
   ],
   "oauth2": {
-    "client_id": "1008383459633-kjfpb3ig8apvku1sgposuquvnuiglkak.apps.googleusercontent.com",
+    "client_id": "SET_BY_scripts/generate-manifest.js_FROM_.env",
     "scopes": ["https://www.googleapis.com/auth/drive.file"]
   },
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "action": {
     "default_popup": "src/popup/index.html",
     "default_icon": {
@@ -37,15 +30,19 @@
       "128": "icons/icon128.png"
     }
   },
+  "commands": {
+    "pause-recording": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Pause or resume the recording"
+    },
+    "stop-recording": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Stop the recording"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["src/dashboard/index.html", "src/editor/index.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

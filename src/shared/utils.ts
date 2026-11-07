@@ -49,3 +49,15 @@ export function rgbToHex(rgb: string): string {
     [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
   );
 }
+
+export function formatDuration(totalSeconds: number) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Seconds actually recorded: time since the start, minus time spent paused. */
+export function recordedSeconds(state: { startedAt: number; pausedAt?: number | null; pausedMs?: number }, now = Date.now()) {
+  const end = state.pausedAt ?? now;
+  return Math.max(0, Math.floor((end - state.startedAt - (state.pausedMs || 0)) / 1000));
+}

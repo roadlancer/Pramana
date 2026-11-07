@@ -2,11 +2,11 @@
 
 ## Overview
 
-Pramana is a Chrome Extension (Manifest V3) with no backend server. All persistent storage lives in the user's own Google Drive; all processing (capture, editing) happens client-side in the browser.
+Pramana is a Chrome Extension (Manifest V3) with no backend server. All persistent storage lives in the user's own Google Drive; all processing (capture, editing, recording) happens client-side in the browser.
 
 ## Core Principle: User-Owned Storage
 
-Pramana authenticates via the user's Google account and only ever reads/writes inside a single managed folder:
+Pramana authenticates via the user's Google account (`drive.file` scope) and only ever reads/writes inside a single folder it created:
 
 ```
 Google Drive
@@ -21,335 +21,181 @@ It never requests access to, lists, or displays the rest of the user's Drive.
 
 ## Execution Contexts (Manifest V3)
 
-| Context | Role in Pramana | Lifecycle |
+| Context | Role | Lifecycle |
 |---|---|---|
-| **Background (service worker)** | Auth/token handling, Drive API calls, capture coordination (`captureVisibleTab` via `windowId`), opening editor tabs, file download | Can be killed/restarted by Chrome at any time |
-| **Content script** | Area-selection overlay + inline editor modal, injected into active page via `executeScript` (world: 'ISOLATED') on each capture; `sendResponse({ success: true })` + `return true` for MV3 async responses | Runs per-tab, isolated from page JS; re-injected on each capture |
-| **Popup** | Toolbar UI — capture/record actions (Full Screen + Select Area only), preview with save/edit option | Destroyed when closed |
-| **Editor (extension page)** | Full-page screenshot editor (opened in new tab from popup) | Full page context |
-| **Dashboard (extension page)** | File library — browsing, searching, previewing, downloading, managing captures | Full page context, longer-lived |
+| **Background (service worker)** | Message router, Google auth/token provider, tab capture, uploads sent by the content script, recording lifecycle (offscreen document, badge, state) | Can be killed/restarted by Chrome at any time; recording state lives in `chrome.storage.session` |
+| **Content script** | Area-selection overlay, crop, and the shared editor mounted in a **shadow root** on the page. Injected on demand by the popup (`scripting.executeScript`), never declared in the manifest | Per tab; guards against double injection |
+| **Popup** | Capture (Visible Tab, Select Area), recording controls (Record Tab / Record Screen, microphone toggle), storage meter | Destroyed when closed; nothing long-running lives here |
+| **Offscreen document** | Tab recordings: owns the `MediaRecorder`, mixes tab audio with the microphone, plays tab audio back, saves to IndexedDB | Created for a tab recording, closed when it ends |
+| **Screen recorder window** | Screen recordings: small visible window that opens Chrome's share picker (`getDisplayMedia`) and records while open | Opened by Record Screen, closed when the recording ends |
+| **Editor page** | Full-page editor (shared editor module) for Visible Tab captures; uploads directly to Drive | Opened in a new tab |
+| **Dashboard (Library)** | Browse, search, sort, preview (images + video), rename, share link, download, trash; reviews finished recordings; one-time microphone permission page | Full page |
 
 ## File Structure
 
 ```
 src/
 ├── background/
-│   ├── index.ts          # Message router (14 message types)
-│   ├── auth.ts           # Google OAuth, token management, user info
-│   ├── capture.ts        # handleCapture (resolves windowId via chrome.tabs.get, calls captureVisibleTab(windowId)); handleCaptureArea
-│   └── storage.ts        # Google Drive upload/list/delete/fetch
-├── content/
-│   └── index.ts          # Area selection overlay + inline editor (self-contained, inlines distToSegment)
-├── popup/
-│   └── App.tsx           # Popup UI with capture/record/preview
+│   ├── index.ts          # Message router; GET_AUTH_TOKEN only answers extension pages
+│   ├── auth.ts           # Google OAuth, token provider with refresh after 401
+│   ├── capture.ts        # captureVisibleTab for Visible Tab and Select Area
+│   ├── storage.ts        # Drive client instance + uploads coming from the content script
+│   └── recording.ts      # Offscreen document, recorder window, tab stream IDs, badge, session state
+├── content/index.ts      # Overlay + crop + shared editor in a shadow root (bundled as one IIFE)
+├── offscreen/
+│   ├── index.html
+│   └── recorder.ts       # Tab capture at the tab's own size, hands the stream to captureRecorder
+├── recorder/
+│   └── App.tsx           # Screen recorder window: share picker, timer, Stop
+├── popup/App.tsx
 ├── editor/
-│   └── App.tsx           # Full-page editor (uses shared editor module)
+│   ├── App.tsx           # Hosts the shared editor; uploads directly via the Drive client
+│   └── pendingEdits.ts   # Cleans up abandoned pending screenshots
 ├── dashboard/
-│   └── App.tsx           # File library with folder tabs, preview, download
-├── shared/
-│   ├── utils.ts          # Pure utility functions (formatBytes, blobToBase64, distToSegment, hexToRgba, rgbToHex)
-│   ├── store.ts          # Zustand global state (defined, not yet wired)
-│   └── editor/           # Reusable canvas editor module
-│       ├── types.ts      # Tool types, colors, emoji list
-│       ├── canvas.ts     # Canvas manager with undo/redo, overlay with pointer-events:none + centered transform
-│       ├── tools.ts      # 7 tool implementations (uses hexToRgba from shared/utils)
-│       ├── ui.ts         # Toolbar UI (vanilla DOM, uses rgbToHex from shared/utils)
-│       └── index.ts      # Public API: createEditor()
-├── __test__/
-│   └── setup.ts          # Global test setup + Chrome API mocks
-└── __mocks__/
-    └── chrome.ts         # Chrome API mock utilities (placeholder)
+│   ├── App.tsx           # Library: auth gate, list, filters, sort
+│   ├── FileCard.tsx      # Lazy thumbnails (Drive thumbnailLink, full-image fallback)
+│   ├── PreviewModal.tsx  # Preview, rename, share, download, trash
+│   ├── RecordingReview.tsx
+│   ├── ConfirmDialog.tsx
+│   ├── MicPermission.tsx
+│   └── useObjectUrl.ts
+└── shared/
+    ├── drive.ts          # Drive client used by background and pages
+    ├── captureRecorder.ts # MediaRecorder + audio mixing + 10-minute limit, shared by both recorders
+    ├── recordingStore.ts # IndexedDB hand-off of the finished recording
+    ├── StorageMeter.tsx  # Handles unlimited accounts
+    ├── toast.ts          # Non-blocking notifications (no alert/confirm/prompt)
+    ├── ErrorBoundary.tsx
+    ├── utils.ts
+    └── editor/           # One object-based editor for both contexts
+        ├── index.ts      # createEditor(): DOM, state, input, history
+        ├── elements.ts   # Pure rendering, hit-testing, moving, blur sizing
+        ├── types.ts
+        ├── styles.ts     # Injected CSS (works inside a shadow root)
+        └── icons.ts
 ```
+
+## Build
+
+| Output | Built by | Why |
+|---|---|---|
+| Popup, Library, Editor, Offscreen pages + `background.js` | `vite.config.ts` | ES modules with shared chunks |
+| `content.js` | `vite.content.config.ts` (IIFE) | Content scripts are classic scripts: the shared editor must be bundled in, not imported |
+| `manifest.json` | `scripts/generate-manifest.js` | Injects the OAuth client ID from `.env` |
 
 ## Data Flow
 
-### Screenshot Capture (Full Screen)
+### Visible Tab capture
 
 ```
-User clicks "Full Screen" in Popup
-        ↓
-Popup sends CAPTURE_SCREENSHOT to background with tabId
-        ↓
-Background resolves windowId via chrome.tabs.get(tabId)
-        ↓
-Background calls captureVisibleTab(windowId) — instant, no picker dialog
-        ↓
-Image captured → returned as dataUrl to Popup
-        ↓
-User clicks "Save to Drive" → uploads directly
-   or clicks "Edit" → opens Editor page in new tab
-        ↓
-Editor: user annotates with tools
-        ↓
-Save to Drive → base64 → background → Drive API
+Popup ──CAPTURE_SCREENSHOT──► Background ── captureVisibleTab(windowId) ──► dataUrl
+Popup shows preview
+  ├─ Save to Drive → UPLOAD_FILE (base64) → Background → Drive (multipart)
+  └─ Edit → chrome.storage.local["pending_edit_<ts>"] → Editor tab
+        Editor → Drive client (direct upload) → pending image removed only after a successful save
 ```
 
-### Screenshot Capture (Select Area)
+### Select Area capture
 
 ```
-User clicks "Select Area" in Popup
-        ↓
-Popup injects content.js into active tab via chrome.scripting.executeScript (world: 'ISOLATED')
-        ↓
-Popup sends CAPTURE_AREA_SELECT message to content script (promise-based chrome.tabs.sendMessage)
-        ↓
-Content script receives message → sendResponse({ success: true }) → return true (MV3 async)
-        ↓
-Content script creates dark overlay + crosshair cursor
-        ↓
-User drags to select region
-        ↓
-On mouseup: cleanupOverlay() → removes from DOM → forced reflow → setTimeout(200) → ensures repaint
-        ↓
-Background captures full tab via captureVisibleTab(windowId)
-        ↓
-Content script crops to selected region (DPR-aware via img.naturalWidth / window.innerWidth)
-        ↓
-Inline editor modal opens on the same page
-        ↓
-User annotates with tools (object-based, select/move/delete)
-        ↓
-Save to Drive → base64 → background → Drive API
+Popup ── executeScript(content.js) + CAPTURE_AREA_SELECT ──► Content script
+Content: overlay (Escape cancels) → user drags → overlay removed → reflow + 200 ms
+Content ──CAPTURE_AREA──► Background ── captureVisibleTab ──► base64
+Content: crop at capture resolution (image width / viewport width) → shared editor in shadow root
+Save → UPLOAD_FILE (base64) → Background → Drive
 ```
 
-### Screen Recording
+### Tab recording
 
 ```
-User clicks "Start Recording" in Popup
-        ↓
-Popup calls getDisplayMedia (screen + audio)
-        ↓
-MediaRecorder captures video/webm
-        ↓
-On stop: blob → base64 → background → Drive API
-        ↓
-Recording saved to Pramana/Recordings/
+Popup ──START_RECORDING {source: 'tab', mic, tabId}──► Background
+Background: tabCapture.getMediaStreamId({targetTabId}) + tab size (chrome.tabs.get)
+Background → offscreen.createDocument(USER_MEDIA) → OFFSCREEN_START {streamId, mic, tabSize, ...}
+Offscreen: getUserMedia(chromeMediaSource: 'tab', exact tab size up to 1920×1080, 30 fps) [+ mic]
+  → AudioContext mix → MediaRecorder (1 s chunks); tab audio routed back to the speakers
 ```
 
-### File Preview & Download (Dashboard)
+A tab recording follows **that tab**, not whatever tab is in front: switching tabs keeps recording the original one (Chrome keeps rendering it), navigating inside it keeps recording, and closing it ends the recording and keeps what was captured.
+
+The offscreen document has no UI, so Chrome can't prompt for the microphone there. Turning on "Include microphone" opens a Library page once to grant it for the extension.
+
+### Screen recording
+
+Chrome's share picker can't open from the service worker (there's no window to attach it to), and the stream it returns only works in the page that asked for it. So:
 
 ```
-User clicks file card in Dashboard
-        ↓
-Dashboard sends FETCH_FILE_DATA to background
-        ↓
-Background fetches file via Drive API (with auth headers) → returns base64
-        ↓
-Dashboard displays base64 data URL in preview modal
-        ↓
-User clicks Download → DOWNLOAD_FILE message
-        ↓
-Background fetches file → converts to blob → chrome.downloads.download
+Popup ──START_RECORDING {source: 'screen', mic}──► Background → windows.create(recorder window)  (reply: pending)
+Recorder window opens getDisplayMedia straight away, with Entire screen preselected (a button appears only if Chrome wants a click)
+  → RECORDING_STARTED → Background marks the recording, badge REC
+  → captureRecorder records in the window (mic prompt can appear here directly)
+Stop: popup (STOP_RECORDING → RECORDER_STOP), the window's Stop button, or Chrome's "Stop sharing" bar
+Closing the window mid-recording asks first; if closed anyway the recording is discarded and the popup says so
 ```
+
+### After either recording
+
+```
+Stop / end of sharing / 10 minutes → blob saved to IndexedDB → RECORDING_FINISHED
+Background closes the offscreen doc or recorder window → opens Library ?review=recording
+Library: preview, rename, Save (resumable upload with progress) or Discard
+```
+
+### Library
+
+Extension pages talk to Drive directly with `createPageDriveClient()`, which borrows the token from the background (`GET_AUTH_TOKEN`). That keeps large files (video preview, downloads, recording uploads) out of runtime messages, which are limited to about 64 MB.
+
+## Drive Client (`shared/drive.ts`)
+
+- Every request carries the token; a **401 triggers one retry** with a refreshed token (the background drops the cached token first).
+- Listing follows `nextPageToken`, so libraries with more than one page of files are complete.
+- Uploads up to 5 MB use multipart; larger ones use a **resumable session** in 8 MB chunks with progress.
+- Delete moves files to Drive's **trash** (restorable).
+- Sharing creates an `anyone` reader permission and returns `webViewLink`; un-sharing deletes the `anyoneWithLink` permission.
+- Quota: accounts without a `limit` are treated as unlimited.
 
 ## Editor Architecture
 
-### Object-Based Rendering
-
-The editor uses an **object-based** approach instead of direct pixel drawing. Each annotation is stored as a data object:
+One module, `shared/editor`, renders in both contexts. Annotations are data, re-rendered on every change:
 
 ```typescript
-type EditorElement = {
-  id: number;
-  type: 'highlight' | 'rectangle' | 'arrow' | 'text' | 'emoji' | 'draw' | 'blur';
-  color?: string;
-  lineWidth?: number;
-  x?: number; y?: number;
-  width?: number; height?: number;
-  x1?: number; y1?: number; x2?: number; y2?: number;
-  points?: { x: number; y: number }[];
-  text?: string;
-  emoji?: string;
-  fontSize?: number;
-  pixelSize?: number;
-  opacity?: number;
-};
+type EditorElement =
+  | { type: 'highlight' | 'rectangle' | 'blur'; x; y; width; height; color; lineWidth }
+  | { type: 'arrow'; x1; y1; x2; y2; color; lineWidth }
+  | { type: 'draw'; points: Point[]; color; lineWidth }
+  | { type: 'text'; x; y; width; height; text; color; fontSize }
+  | { type: 'emoji'; x; y; width; height; emoji; fontSize };
 ```
 
-**Rendering pipeline:**
-1. Draw base screenshot image
-2. Iterate through `elements[]` array, rendering each
-3. If an element is selected, draw selection handles (dashed blue border)
-
-**Benefits:**
-- Elements can be selected, moved, and deleted after placement
-- Undo/redo works on the element array (JSON serialize/deserialize)
-- Canvas re-renders cleanly from objects on every frame
-
-### Tools
-
-| Tool | Behavior |
-|------|----------|
-| `select` | Click to select element, drag to move, Delete/Backspace to remove |
-| `highlight` | Semi-transparent colored rectangle overlay |
-| `draw` | Freehand pencil strokes |
-| `text` | Click to place, prompt for text input |
-| `arrow` | Drag from→to, draws arrowhead line |
-| `rectangle` | Drag to draw outlined rectangle |
-| `blur` | Drag rectangle → pixelates that region |
-| `emoji` | Click to place fire emoji (extensible) |
-| `eraser` | Click on any element to delete it |
-
-### Two Editor Contexts
-
-| Context | Location | Module | Use Case |
-|---------|----------|--------|----------|
-| **Inline modal** | Content script (on page) | Self-contained in `content/index.ts` (inlined `distToSegment`, no ES module imports) | After Select Area capture |
-| **Full-page editor** | `src/editor/App.tsx` | Uses `src/shared/editor/` | After Full Screen capture (via popup "Edit" button) |
-
-The content script editor is fully self-contained — it inlines all necessary pure functions directly. Content scripts cannot use ES module `import` statements (Chrome injects them as classic scripts), so `distToSegment` is duplicated into the content script.
-
-### Editor Canvas Fitting
-
-The shared editor canvas uses CSS constraints to fit large screenshots without scrolling:
-
-- Canvas: `max-width: 100%; max-height: 100%` — visually scales to fit container while keeping full resolution buffer
-- Overlay canvas: same constraints + `pointer-events: none` (so mouse events pass through to main canvas) + `position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)` (centers over main canvas)
-- Wrapper: `display: flex; align-items: center; justify-content: center; overflow: hidden` — centers canvas in available space
-
-### Two Editor Contexts
-
-| Context | Location | Module | Use Case |
-|---------|----------|--------|----------|
-| **Inline modal** | Content script (on page) | Self-contained in `content/index.ts` (inlined `distToSegment`, no ES module imports) | After Select Area capture |
-| **Full-page editor** | `src/editor/App.tsx` | Uses `src/shared/editor/` | After Full Screen capture (via popup "Edit" button) |
-
-## Key Implementation Details
-
-### Pure Utility Functions (Shared)
-
-Pure functions extracted into `src/shared/utils.ts` for testability:
-
-```typescript
-formatBytes(bytes: number): string        // Human-readable file sizes
-blobToBase64(blob: Blob): Promise<string> // Blob → base64 for messaging
-distToSegment(p, a, b): number            // Point-to-line-segment distance (geometry)
-hexToRgba(hex, alpha): string             // Hex color → rgba string
-rgbToHex(rgb): string                     // CSS rgb() → hex color
-```
-
-### DPR-Aware Area Crop
-
-`captureVisibleTab` returns an image at actual screen resolution (may differ from CSS pixel dimensions on HiDPI/Retina displays). The crop uses the image's own DPR to compute correct coordinates:
-
-```typescript
-const imgDpr = img.naturalWidth / window.innerWidth;
-canvas.width = area.width * imgDpr;
-canvas.height = area.height * imgDpr;
-ctx.drawImage(img, area.x * imgDpr, area.y * imgDpr, ...);
-```
-
-This prevents black regions in captured screenshots when screen DPR ≠ 1.
-
-### Blob-to-Base64 Conversion
-
-Chrome's `chrome.runtime.sendMessage` cannot serialize Blob objects. All file data is converted to base64 strings before sending:
-
-```typescript
-// Popup/Content → Background
-{ type: 'UPLOAD_FILE', payload: { fileBase64: string, metadata: { name, type } } }
-
-// Background reconstructs Blob
-const byteCharacters = atob(fileBase64);
-const byteArray = new Uint8Array(byteCharacters.length);
-// ... → new Blob([byteArray], { type: mimeType })
-```
-
-### Token Refresh
-
-`getStoredToken()` in `auth.ts` first tries `chrome.identity.getAuthToken({ interactive: false })` for automatic refresh, falling back to the stored token. This prevents stale-token upload failures.
-
-### Content Script Timing
-
-After removing the overlay before capture, forced reflow + setTimeout ensures the browser has re-rendered:
-
-```
-cleanupOverlay() → removes from DOM
-void document.body.offsetHeight → forced reflow
-setTimeout(200) → allows browser to complete repaint
-sendMessage → background calls captureVisibleTab (clean screenshot)
-```
-
-### Content Script Message Response
-
-Content script listeners must call `sendResponse()` and return `true` for async responses. Without this, `chrome.runtime.lastError` is set to "The message port closed before a response was received" even when the message was successfully handled:
-
-```typescript
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === 'CAPTURE_AREA_SELECT') {
-    createOverlay();
-    sendResponse({ success: true });
-  }
-  return true; // Critical: keeps message port open for MV3 async
-});
-```
-
-### Overlay Capture Timing
-
-After removing the overlay before capture, forced reflow + setTimeout ensures the browser has re-rendered:
-
-```
-cleanupOverlay() → removes existing overlay from DOM
-void document.body.offsetHeight → forced reflow
-setTimeout(200) → allows browser to complete repaint
-sendMessage → background calls captureVisibleTab (clean screenshot)
-```
-
-### Overlay Persistence Fix
-
-`createOverlay()` removes existing `#pramana-area-overlay` before creating a new one. `closeEditorModal()` also cleans up lingering overlays to prevent duplicates after repeated captures.
-
-### Authorized File Preview
-
-Dashboard image preview uses base64 data URLs fetched through the background (Drive API requires auth headers, can't use direct URLs in `<img>` tags):
-
-```
-Dashboard → FETCH_FILE_DATA (fileId) → Background → Drive API (?alt=media) → base64 → Dashboard
-```
-
-## Error Handling
-
-| Scenario | Handling |
-|---|---|
-| Upload failure | Error toast, user can retry |
-| Token expired | Chrome Identity API silent refresh; fallback to stored token |
-| Drive storage low | Warning toast, uploads continue |
-| Drive storage full | Error toast, capture still works |
-| Extension reloaded | Content script shows "Please refresh the page" notification; popup falls back to `executeScript` injection |
-| Chrome:// page capture | Blocked with error message |
-| Area capture DPR mismatch | Uses `img.naturalWidth / window.innerWidth` to compute actual DPR |
-| Editor canvas overflow | Canvas CSS max-width/max-height constrains visual size; overlay canvas `pointer-events:none` allows tool interaction; overlay centered via `transform: translate(-50%, -50%)` |
-| Overlay blocking tools | Overlay canvas `pointer-events: none` prevents event interception by absolute-positioned overlay |
+- Element arrays are never mutated, so undo/redo (30 steps) stores them directly. Moves are recorded once per drag.
+- Tools: Select, Highlight, Draw, Text (inline input, no `prompt()`), Arrow, Rectangle, Blur, Emoji (24 choices), Eraser. Single-key shortcuts (V H P T A R B E X), Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Ctrl+C (Copy image), Ctrl+S, Delete, Escape.
+- Copy image (`src/shared/clipboard.ts`): writes a PNG with `navigator.clipboard.write`, passing the image as a promise so the click's permission is kept; also in the popup preview and the Library preview. Not available on `http://` pages (no async clipboard there).
+- Blur pixelates with blocks of a quarter of the region's short side (min 16 px), so text inside is unreadable.
+- Keyboard handling uses the capture phase, so shortcuts reach the editor before the page underneath.
+- The canvas keeps full resolution and is scaled to fit with a `ResizeObserver`.
 
 ## State Management
 
 | State | Storage | Purpose |
 |---|---|---|
-| UI state (active tool, selection) | Local variables in editor | Fast reads/writes |
-| Auth token | `chrome.storage.local` | Persisted across sessions |
-| User info (email, name) | `chrome.storage.local` | Displayed in popup |
-| Storage quota | `chrome.storage.local` | Cached Drive usage info |
-| Editor pending image | `chrome.storage.local` | Pass image data between popup and editor tab |
-| Editor elements | In-memory array | Undo/redo stack, re-rendered on each frame |
+| Auth token, user info | `chrome.storage.local` | Persisted across sessions |
+| Pending screenshot for the editor | `chrome.storage.local["pending_edit_<ts>"]` | Survives an editor refresh; removed after save/discard, or after 24 h |
+| Recording in progress | `chrome.storage.session` (`recording_state`, `recorder_window`) | Popup timer after reopening; cleared on finish/failure |
+| Finished recording awaiting review | IndexedDB `pramana/recordings` | Shared by offscreen document and Library |
+| Microphone preference, recording format | `chrome.storage.local["record_mic"]`, `["record_format"]` (`mp4` default / `webm`) | Popup controls |
+| Editor elements, history | In memory | Re-rendered per change |
 
-## Testing Architecture
+## Error Handling
 
-| Type | Framework | Target |
-|---|---|---|
-| Unit tests | Vitest | Pure utility functions (`formatBytes`, `hexToRgba`, `distToSegment`, etc.) |
-| Integration tests | Vitest | Background handlers (auth, capture, storage, message router) |
-| Component tests | @testing-library/react | React UI components (Dashboard) |
-| E2E tests | Playwright (manual) | Full extension flows in Chrome |
+| Scenario | Handling |
+|---|---|
+| Handler throws | Router always replies `{ success: false, error }`; callers never hang |
+| Token expired | One retry with a refreshed token |
+| Upload fails | Toast/notice with the Drive message; editor Save re-enables; recordings stay in IndexedDB for retry |
+| Signed out in Library | Sign-in prompt instead of an empty list |
+| Library load fails | Error with Try again |
+| Microphone blocked | Recording continues without voice and says so |
+| Browser pages (`chrome://`) | Select Area refuses with a message |
 
-Chrome APIs are mocked globally in `src/__test__/setup.ts` for all tests.
+## Why Manifest V3 / Why Drive
 
-## Why Manifest V3
-
-Manifest V2 extensions are being phased out by Chrome; V3 is the current and only forward-compatible option. Key constraint: the background service worker can be killed/restarted at any time — no long-lived in-memory state there.
-
-## Why Google Drive as the Only Backend
-
-- No server to build, host, or secure
-- No storage cost to Pramana — the product can stay free indefinitely
-- Privacy is structural, not just policy: Pramana architecturally cannot see files outside its own folder
-- Files remain usable/portable even if the extension is uninstalled
+MV3 is the only forward-compatible extension platform; the service worker can be killed at any time, which is why recording lives in an offscreen document and state lives in `chrome.storage.session`. Drive as the only backend means no server to run or secure, no storage cost, and privacy enforced by the `drive.file` scope.

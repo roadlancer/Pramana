@@ -1,94 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleStorage } from '../storage';
+import { drive, handleUpload } from '../storage';
 
-describe('handleStorage', () => {
+describe('handleUpload', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it('routes LIST_FILES correctly', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ files: [] }),
-    }));
+  it('decodes the base64 payload and uploads it to the matching folder', async () => {
+    const upload = vi.spyOn(drive, 'upload').mockResolvedValue('file-1');
 
-    const result = await handleStorage({ type: 'LIST_FILES', token: 'test-token' });
-    expect(result.success).toBe(true);
+    const result = await handleUpload({ fileBase64: btoa('png-bytes'), metadata: { name: 'a.png', type: 'screenshot' } });
+
+    expect(result).toEqual({ success: true, fileId: 'file-1' });
+    const [blob, meta] = upload.mock.calls[0];
+    expect(meta).toEqual({ name: 'a.png', kind: 'screenshot' });
+    expect(blob.type).toBe('image/png');
+    expect(await blob.text()).toBe('png-bytes');
   });
 
-  it('routes DELETE_FILE correctly', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+  it('files unknown types under Other', async () => {
+    const upload = vi.spyOn(drive, 'upload').mockResolvedValue('file-2');
+    await handleUpload({ fileBase64: btoa('x'), metadata: { name: 'x.bin', type: 'mystery' } });
+    expect(upload.mock.calls[0][1].kind).toBe('other');
+  });
 
-    const result = await handleStorage({
-      type: 'DELETE_FILE',
-      fileId: 'test-file-id',
-      token: 'test-token',
+  it('returns the Drive error message on failure', async () => {
+    vi.spyOn(drive, 'upload').mockRejectedValue(new Error('Storage quota exceeded'));
+    expect(await handleUpload({ fileBase64: btoa('x'), metadata: { type: 'screenshot' } })).toEqual({
+      success: false,
+      error: 'Storage quota exceeded',
     });
-    expect(result.success).toBe(true);
-  });
-
-  it('returns error for unknown action type', async () => {
-    const result = await handleStorage({ type: 'UNKNOWN', token: 'test-token' });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Unknown action');
-  });
-
-  it('routes UPLOAD to uploadFile successfully', async () => {
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ files: [{ id: 'folder-id' }] }),
-      })
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ files: [{ id: 'subfolder-id' }] }),
-      })
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ id: 'uploaded-file-id' }),
-      })
-    );
-
-    const result = await handleStorage({
-      type: 'UPLOAD',
-      fileBase64: btoa('test image data'),
-      metadata: { name: 'test.png', type: 'screenshot' },
-      token: 'test-token',
-    });
-    expect(result.success).toBe(true);
-    expect((result as any).fileId).toBe('uploaded-file-id');
-  });
-
-  it('handles upload error from Drive API', async () => {
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ files: [{ id: 'folder-id' }] }),
-      })
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ files: [{ id: 'subfolder-id' }] }),
-      })
-      .mockResolvedValueOnce({
-        json: () => Promise.resolve({ error: { message: 'Storage quota exceeded' } }),
-      })
-    );
-
-    const result = await handleStorage({
-      type: 'UPLOAD',
-      fileBase64: btoa('test'),
-      metadata: { name: 'test.png', type: 'screenshot' },
-      token: 'test-token',
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Storage quota exceeded');
-  });
-
-  it('DELETE_FILE returns error on API failure', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({ error: { message: 'Not found' } }),
-    }));
-
-    const result = await handleStorage({
-      type: 'DELETE_FILE',
-      fileId: 'nonexistent',
-      token: 'test-token',
-    });
-    expect(result.success).toBe(false);
   });
 });

@@ -19,37 +19,44 @@
 | Auth | Google OAuth 2.0 via Chrome Identity API | Native Chrome integration, no raw OAuth redirect handling |
 | Remote storage | Google Drive API v3 | Core product principle — no Pramana-owned cloud |
 | Extension state | Chrome Storage API (`local`) | Auth tokens, user info, storage quota cache, editor pending data |
-| UI state management | Zustand 5.0 (defined, not yet wired) | Lightweight, no boilerplate |
+| UI state management | React `useState` + local variables | Lightweight, no external state library needed |
 
 ## Capture
 
 | Layer | Choice | Why |
 |---|---|---|
-| Full screen capture | `chrome.tabs.captureVisibleTab(windowId)` | Chrome Extension API, instant capture with no picker dialog; background resolves `windowId` via `chrome.tabs.get()` |
-| Area selection | `chrome.scripting.executeScript` + `chrome.tabs.sendMessage` (promise-based) | MV3 requirement; content script drawn on page, background captures, content script crops |
-| Area crop | DPR-aware canvas drawImage | Uses `img.naturalWidth / window.innerWidth` to avoid black regions |
-| Screen recording | `getDisplayMedia()` + `MediaRecorder` | Native browser recording (VP9/WebM) |
-| Audio capture | `getDisplayMedia()` with audio constraints | Echo cancellation + noise suppression |
+| Visible Tab capture | `chrome.tabs.captureVisibleTab(windowId)` | Instant, no picker |
+| Area selection | `chrome.scripting.executeScript` on demand + `chrome.tabs.sendMessage` | No content script on every page; injected only when the user clicks Select Area |
+| Area crop | Canvas `drawImage` scaled by `image width / viewport width` | Matches the capture's real resolution on HiDPI screens |
+| Tab recording | `chrome.tabCapture.getMediaStreamId` (background) → `getUserMedia` in an offscreen document, exact tab size up to 1920×1080 | Keeps recording after the popup closes; no black bars |
+| Screen recording | `getDisplayMedia()` in a small visible recorder window | The share picker needs a page to open from, and its stream only works in that page |
+| Audio | Web Audio mix of tab/screen audio and the microphone | One audio track; tab audio routed back to the speakers |
+| Encoder | `MediaRecorder`: MP4 (H.264 + AAC/Opus) by default, WebM (VP9/Opus) on request; falls back to WebM | Native, no dependencies; MP4 has a real duration and plays almost everywhere |
+| Hand-off | IndexedDB | Finished recording passes from offscreen document to the Library |
 
 ## Editing
 
 | Layer | Choice | Why |
 |---|---|---|
-| Image editor (inline) | Vanilla Canvas API + DOM | Self-contained in content script, inlines all pure functions (no ES module imports — Chrome injects content scripts as classic scripts) |
-| Image editor (full-page) | Shared module (`src/shared/editor/`) | Reusable across editor page; creates own canvas in `CanvasManager` with `pointer-events: none` overlay |
-| Rendering approach | Object-based (element array) | Supports select/move/delete after placement |
-| Undo/Redo | JSON serialize/deserialize of element array | Simple, reliable, 30-step stack |
-| Tool rendering | Direct Canvas 2D API | No external drawing library needed |
-| SVG icons | innerHTML (not textContent) | Toolbar buttons render SVG icons properly |
-| Canvas fitting | `max-width:100%; max-height:100%` + flex wrapper | Image scales to fit without scroll; overlay centered with `transform: translate(-50%, -50%)` |
+| Editor | One vanilla Canvas + DOM module (`src/shared/editor/`) | Same editor in the page modal and the editor tab |
+| Isolation on web pages | Shadow root + injected CSS | Page styles and shortcuts can't interfere |
+| Rendering | Immutable element array, re-rendered per change | Select/move/delete after placement; history stores arrays directly |
+| Text | Inline `<input>` over the canvas | No `prompt()` |
+| Blur | Pixelation with blocks ≥ ¼ of the region's short side (min 16 px) | Text becomes unreadable |
+| Canvas fitting | Full-resolution canvas scaled with `ResizeObserver` | Sharp output, fits any window |
 
 ## File Management
 
 | Layer | Choice | Why |
 |---|---|---|
-| File preview | Base64 data URLs via background fetch | Drive API requires auth headers, can't use direct URLs in `<img>` |
-| File download | `chrome.downloads.download` | Native Chrome download manager, shows in Downloads bar |
-| File listing | Drive API query with subfolder iteration | Returns `folder` field for each file (Screenshots/Recordings/Other) |
+| Drive access | `src/shared/drive.ts` client used by background and pages | One implementation of auth retry, pagination and uploads |
+| Large files | Pages fetch/upload directly with a token from the background | Avoids the ~64 MB runtime message limit |
+| Uploads | Multipart ≤ 5 MB, resumable (8 MB chunks) above | Reliable for recordings |
+| Preview | `fetch` → Blob → object URL | Works for images and video |
+| Thumbnails | Drive `thumbnailLink`, full image as fallback; `IntersectionObserver` | Small downloads, only for visible cards |
+| Download | Object URL + `<a download>` | No `downloads` permission needed |
+| Delete | Drive trash (`PATCH trashed: true`) | Restorable |
+| Sharing | Drive `anyone` reader permission + `webViewLink` | Share with one click, revoke with one click |
 
 ## Testing
 
@@ -59,7 +66,7 @@
 | DOM environment | jsdom | Simulates browser APIs for unit/integration tests |
 | Component testing | @testing-library/react | React component rendering and interaction testing |
 | User interaction | @testing-library/user-event | Simulates user clicks, typing, keyboard shortcuts |
-| Test setup | `src/__test__/setup.ts` | Global Chrome API mocks, jsdom environment config |
+| Test setup | `src/__test__/setup.ts` | Global Chrome API mocks, IntersectionObserver mock, jsdom environment config |
 | Pure functions | `src/shared/utils.ts` | Extracted for testability: formatBytes, hexToRgba, rgbToHex, distToSegment |
 
 ### Test Commands
@@ -73,26 +80,17 @@ pnpm test:coverage  # Run with V8 coverage report
 
 ## Build & Output
 
+Two Vite builds: `vite.config.ts` (pages + background, ES modules) and `vite.content.config.ts` (content script as one IIFE, since content scripts can't import modules).
+
 ```
 dist/
-├── manifest.json           # Generated with OAuth client ID + key field
-├── background.js           # Service worker (10 KB)
-├── content.js              # Content script (18 KB)
-├── icons/                  # Extension icons
+├── manifest.json        # Generated with OAuth client ID + key field
+├── background.js        # Service worker (ES module)
+├── content.js           # Content script incl. the shared editor (IIFE)
+├── icons/
 └── src/
-    ├── popup/
-    │   ├── index.html
-    │   └── popup.js        # Popup bundle (6 KB)
-    ├── editor/
-    │   ├── index.html
-    │   └── editor.js       # Editor page bundle (20 KB)
-    ├── dashboard/
-    │   ├── index.html
-    │   └── dashboard.js    # Dashboard bundle (4 KB)
-    └── shared/
-        ├── utils-*.js      # Shared utility functions (1 KB)
-        ├── src-*.js        # Shared editor module (191 KB)
-        └── *.css           # Global styles (11 KB)
+    ├── popup/  editor/  dashboard/  offscreen/   # index.html + page bundle
+    └── shared/          # Shared chunks (React, Drive client, ...) and CSS
 ```
 
 ## Decision Log
@@ -102,15 +100,22 @@ dist/
 | Tailwind CSS → Global CSS | **Changed** | Tailwind removed; single `index.css` with dark theme |
 | Fabric.js/Konva.js → Vanilla Canvas | **Decided** | No external drawing library; object-based rendering with vanilla API |
 | npm → pnpm | **Changed** | pnpm for faster installs and strict deps |
-| Content script embedding | **Decided** | Content script inlines all pure functions (no ES module imports — Chrome injects content scripts as classic scripts) |
-| Editor contexts | **Decided** | Two editors: inline modal (content script) and full-page (editor tab) |
+| Content script bundling | **Changed** | Separate IIFE build so the content script can import the shared editor (previously it inlined a second copy) |
+| Editor contexts | **Changed** | One shared object-based editor for the page modal and the editor tab |
 | Blob vs Base64 for messaging | **Decided** | Base64 strings for all file data through `chrome.runtime.sendMessage` (Blobs can't be serialized) |
 | DPR crop method | **Decided** | Uses `img.naturalWidth / window.innerWidth` instead of `window.devicePixelRatio` to match actual capture resolution |
-| File preview method | **Decided** | Base64 data URLs fetched through background (Drive auth headers required) |
-| File download method | **Decided** | `chrome.downloads.download` with blob URL (native Chrome download UI) |
+| File preview method | **Changed** | Pages fetch Blobs directly with a token from the background (object URLs; works for video) |
+| File download method | **Changed** | Object URL + `<a download>`; `downloads` permission dropped |
 | Pure function extraction | **Decided** | formatBytes, hexToRgba, rgbToHex, distToSegment extracted to shared/utils for unit testing |
 | Test framework | **Decided** | Vitest + @testing-library/react for unit/integration/component tests |
 | Chrome API mocking | **Decided** | Global mocks in setup.ts; no actual Chrome APIs called in tests |
 | Full screen capture | **Decided** | `captureVisibleTab` via background (not `getDisplayMedia`) — no picker dialog, instant capture |
 | Area injection | **Decided** | `chrome.scripting.executeScript` + promise-based `chrome.tabs.sendMessage` (MV3 compliant) |
 | Overlay canvas | **Decided** | `pointer-events: none` + `transform: translate(-50%, -50%)` to center over main canvas |
+| Error boundaries | **Decided** | `ErrorBoundary` component wraps all React apps for crash-safe UIs |
+| Lazy thumbnails | **Decided** | `IntersectionObserver` with 200px rootMargin for dashboard file grid thumbnails |
+| Removed Zustand | **Changed** | Zustand store removed; all state managed via React `useState` + local variables |
+| Recording host | **Decided** | Tab: offscreen document (`USER_MEDIA`). Screen: visible recorder window, because `chooseDesktopMedia` from the worker has no window and fails at once |
+| Content script delivery | **Decided** | Injected on demand only; no manifest `content_scripts`, no `<all_urls>` |
+| Delete behaviour | **Decided** | Move to Drive trash instead of permanent delete |
+| E2E testing | **Decided** | Own CDP runner (`e2e/run.mjs`) against headless Chromium with a fake Drive; no extra dependencies |

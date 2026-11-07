@@ -6,7 +6,7 @@
 - [x] Chrome extension project setup (Manifest V3)
 - [x] React + TypeScript + Vite build pipeline
 - [x] Base UI structure / component scaffolding
-- [x] Manifest configuration (permissions, background service worker, content scripts)
+- [x] Manifest configuration (permissions, background service worker; content script injected on demand)
 - [x] `generate-manifest.js` for OAuth client ID injection
 - [x] Fixed Extension ID via `key` field in manifest
 
@@ -33,7 +33,7 @@
 - [x] Selection overlay: hide before capture, forced reflow + setTimeout for clean screenshot
 - [x] DPR-aware area crop (`img.naturalWidth / window.innerWidth` — no black layer)
 - [x] Screenshot preview in popup with "Save to Drive" and "Edit" options
-- [x] Two capture buttons only: Full Screen + Select Area
+- [x] Two capture buttons: Visible Tab + Select Area
 
 ### Phase 5 — Screenshot Editor ✅ Complete
 - [x] Object-based rendering (elements stored as data, not pixels)
@@ -44,7 +44,7 @@
 - [x] Font size slider
 - [x] Undo/Redo (Ctrl+Z / Ctrl+Shift+Z, 30-step stack)
 - [x] Inline editor modal (after Select Area, on same page)
-- [x] Full-page editor (after Full Screen, opens in new tab)
+- [x] Full-page editor (after Visible Tab → Edit, opens in new tab)
 - [x] Save to Drive from editor
 - [x] `willReadFrequently` canvas optimization
 - [x] SVG icons in toolbar (innerHTML, not textContent)
@@ -52,7 +52,7 @@
 - [x] Canvas fitting: `max-width:100%;max-height:100%` with flex wrapper
 
 ### Phase 6 — Screen Recording ✅ Complete
-- [x] Screen recording via `getDisplayMedia()` + `MediaRecorder` (VP9/WebM)
+- [x] Tab recording via `tabCapture` + `MediaRecorder` (VP9/WebM)
 - [x] Microphone audio capture
 - [x] Recording controls (start/stop)
 - [x] Auto-stop when user stops sharing
@@ -70,12 +70,41 @@
 ### Phase 8 — Testing ✅ Complete
 - [x] Vitest test framework setup (jsdom environment)
 - [x] Chrome API mock utility (`src/__test__/setup.ts`)
+- [x] IntersectionObserver mock for dashboard tests
 - [x] Pure function extraction (`src/shared/utils.ts`)
 - [x] Unit tests: formatBytes, distToSegment, hexToRgba, rgbToHex, DEFAULT_COLORS, EMOJI_LIST
 - [x] Integration tests: handleAuth, checkStorageQuota, handleCapture, handleCaptureArea, handleStorage, message router
 - [x] Component tests: Dashboard App (folder tabs, search, file display)
 - [x] E2E test scenarios documented in TESTING.md
-- [x] 59 tests passing
+- [x] Initial 59 tests
+
+### Phase 8.5 — Code Quality ✅ Complete
+- [x] Removed dead Zustand store (never wired to any component)
+- [x] Removed Vite scaffold leftovers (App.tsx, main.tsx, assets/)
+- [x] Added ErrorBoundary component for crash-safe React UIs
+- [x] Fixed dashboard thumbnails (lazy-loaded via IntersectionObserver)
+- [x] Removed CSS duplication (duplicate .user-email, .storage-info, .storage-bar, .storage-fill rules)
+- [x] Fixed private field access in shared editor (added getCurrentTool/getIsDrawing getters)
+- [x] Added .env.example for developer onboarding
+- [x] Cleaned up blank lines in popup and dashboard
+
+### Phase 8.6 — Hardening & Missing Features ✅ Complete
+- [x] Fixed storage meter never showing (quota response), router replies on errors instead of hanging
+- [x] One object-based editor for both contexts (Select tool everywhere, inline text, single Save button, strong blur)
+- [x] Fixed first editor drag being lost; editor keeps the screenshot across refresh
+- [x] Escape cancels area selection; on-demand injection only, guarded against double injection; editor in a shadow root
+- [x] Recording in an offscreen document (survives popup close), Record Screen, microphone, tab audio passthrough, REC badge
+- [x] Recording review in the Library before saving
+- [x] Shared Drive client: 401 refresh + retry, pagination, resumable uploads with progress, trash instead of delete
+- [x] Library: sign-in prompt, error/retry, sort, rename, share link / stop sharing / open in Drive, video playback, Drive thumbnails, in-page confirm dialog
+- [x] Replaced `alert` / `confirm` / `prompt` with toasts, notices and dialogs
+- [x] Unlimited-storage accounts; Google token only given to extension pages
+- [x] Fewer permissions: no declared content scripts, no `downloads`, no web-accessible pages
+- [x] Build: content script as its own IIFE bundle, no duplicate icons, coverage works, `typecheck` really checks
+- [x] Screen recording moved to a visible recorder window (the worker-based picker failed instantly); `desktopCapture` permission dropped
+- [x] Tab recordings at the tab's own size (were 800×600 with black bars)
+- [x] Recording format choice: MP4 (default) or WebM; share picker opens immediately on Entire screen
+- [x] 151 tests + `pnpm test:e2e` headless end-to-end run (incl. tab switching and closing the recorded tab)
 
 ### Phase 9 — Release ⬜ Not Started
 - [ ] Privacy policy drafting
@@ -86,19 +115,16 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Google OAuth login | ✅ | Real Google OAuth, `drive.file` scope only |
-| Full Screen capture | ✅ | Via `captureVisibleTab(windowId)` — instant, no picker; popup → preview → save/edit |
-| Select Area capture | ✅ | `executeScript` → content script overlay → DPR-aware crop → inline editor |
-| Inline editor | ✅ | Object-based, 9 tools, select/move/delete |
-| Full-page editor | ✅ | Opens in new tab, uses shared editor module with centered overlay canvas |
-| Upload to Drive | ✅ | Base64 → background → multipart upload |
-| Drive folder management | ✅ | Auto-creates Pramana/Screenshots, etc. |
-| Screen recording | ✅ | WebM, mic audio, auto-stop |
-| Dashboard library | ✅ | Grid view, folder tabs, search, preview, download, delete |
-| Storage quota display | ✅ | In popup and dashboard |
-| File preview | ✅ | Base64 data URLs fetched via background (auth headers) |
-| File download | ✅ | Via chrome.downloads API |
-| Test suite | ✅ | 59 tests: 29 unit, 22 integration, 8 component |
+| Google OAuth login | ✅ | `drive.file` scope only; refresh + retry on expired token |
+| Visible Tab capture | ✅ | `captureVisibleTab(windowId)`; popup → preview → save/edit |
+| Select Area capture | ✅ | On-demand injection → overlay (Escape cancels) → crop → editor in shadow root |
+| Editor | ✅ | One object-based editor for page modal and editor tab; 9 tools; inline text; strong blur; shortcuts |
+| Upload to Drive | ✅ | Multipart ≤ 5 MB, resumable above |
+| Tab recording | ✅ | Offscreen document, tab audio, optional mic, 10-minute limit, review before saving |
+| Screen recording | ✅ | Share picker in a small recorder window |
+| Library | ✅ | Sign-in gate, search, tabs, sort, thumbnails, image/video preview, rename, download, trash |
+| Sharing | ✅ | Share link, copy link, stop sharing, open in Drive |
+| Test suite | ✅ | 139 tests + headless end-to-end run |
 
 ## Future Roadmap (Post-MVP)
 

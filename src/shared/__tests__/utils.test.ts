@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes, distToSegment, hexToRgba, rgbToHex } from '../utils';
+import { formatBytes, distToSegment, hexToRgba, rgbToHex, formatDuration, recordedSeconds } from '../utils';
 
 describe('formatBytes', () => {
   it('returns "0 B" for zero bytes', () => {
@@ -116,5 +116,26 @@ describe('rgbToHex', () => {
 
   it('returns input for invalid format', () => {
     expect(rgbToHex('invalid')).toBe('invalid');
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats minutes and seconds', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(65)).toBe('1:05');
+    expect(formatDuration(600)).toBe('10:00');
+  });
+});
+
+describe('recordedSeconds', () => {
+  it('counts time since the start, minus paused time', () => {
+    expect(recordedSeconds({ startedAt: 0, pausedMs: 0 }, 65_400)).toBe(65);
+    expect(recordedSeconds({ startedAt: 0, pausedMs: 20_000 }, 65_000)).toBe(45);
+  });
+
+  it('stays still while paused', () => {
+    const state = { startedAt: 0, pausedAt: 30_000, pausedMs: 5_000 };
+    expect(recordedSeconds(state, 31_000)).toBe(25);
+    expect(recordedSeconds(state, 90_000)).toBe(25);
   });
 });

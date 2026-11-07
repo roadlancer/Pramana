@@ -1,58 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { checkStorageQuota } from '../auth';
+import { getToken } from '../auth';
 
-describe('checkStorageQuota', () => {
+const identity = () => (globalThis.chrome as any).identity;
+const local = () => (globalThis.chrome as any).storage.local;
+
+describe('getToken', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    local().get = vi.fn().mockResolvedValue({});
   });
 
-  it('returns normal status when plenty of space', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({
-        storageQuota: { limit: '16106127360', usage: '5000000000' },
-      }),
-    }));
+  it('returns the cached Chrome identity token and stores it', async () => {
+    identity().getAuthToken = vi.fn((_opts: unknown, cb: (t: string) => void) => cb('cached'));
 
-    const result = await checkStorageQuota('test-token');
-    expect(result.status).toBe('normal');
-    expect(result.limit).toBe(16106127360);
-    expect(result.usage).toBe(5000000000);
-    expect(result.available).toBe(16106127360 - 5000000000);
+    expect(await getToken()).toBe('cached');
+    expect(identity().getAuthToken).toHaveBeenCalledWith({ interactive: false }, expect.any(Function));
+    expect(local().set).toHaveBeenCalledWith({ auth_token: 'cached' });
   });
 
-  it('returns warning status when space is low', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({
-        storageQuota: { limit: '16106127360', usage: '15700000000' },
-      }),
-    }));
+  it('drops the rejected token before fetching a new one on refresh', async () => {
+    const tokens = ['stale', 'fresh'];
+    identity().getAuthToken = vi.fn((_opts: unknown, cb: (t: string) => void) => cb(tokens.shift()!));
 
-    const result = await checkStorageQuota('test-token');
-    expect(result.status).toBe('warning');
+    expect(await getToken(true)).toBe('fresh');
+    expect(identity().removeCachedAuthToken).toHaveBeenCalledWith({ token: 'stale' });
+    expect(local().remove).toHaveBeenCalledWith(['auth_token']);
   });
 
-  it('returns full status when no space', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({
-        storageQuota: { limit: '16106127360', usage: '16106127360' },
-      }),
-    }));
-
-    const result = await checkStorageQuota('test-token');
-    expect(result.status).toBe('full');
-    expect(result.available).toBe(0);
-  });
-
-  it('throws on fetch failure', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
-    await expect(checkStorageQuota('test-token')).rejects.toThrow('Network error');
-  });
-
-  it('throws on API error in response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ error: { message: 'Invalid token' } }),
-    }));
-
-    await expect(checkStorageQuota('test-token')).rejects.toThrow('Invalid token');
+  it('returns null when the user is signed out', async () => {
+    identity().getAuthToken = vi.fn((_opts: unknown, cb: (t?: string) => void) => cb(undefined));
+    expect(await getToken()).toBeNull();
   });
 });

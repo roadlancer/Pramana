@@ -31,10 +31,10 @@ const manifestTemplate = {
   permissions: [
     "identity",
     "tabCapture",
-    "desktopCapture",
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "offscreen"
   ],
   host_permissions: [
     "https://www.googleapis.com/*"
@@ -47,13 +47,6 @@ const manifestTemplate = {
     service_worker: "background.js",
     type: "module"
   },
-  content_scripts: [
-    {
-      matches: ["<all_urls>"],
-      js: ["content.js"],
-      run_at: "document_idle"
-    }
-  ],
   action: {
     default_popup: "src/popup/index.html",
     default_icon: {
@@ -62,17 +55,21 @@ const manifestTemplate = {
       "128": "icons/icon128.png"
     }
   },
+  commands: {
+    "pause-recording": {
+      suggested_key: { default: "Alt+Shift+P" },
+      description: "Pause or resume the recording"
+    },
+    "stop-recording": {
+      suggested_key: { default: "Alt+Shift+S" },
+      description: "Stop the recording"
+    }
+  },
   icons: {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  web_accessible_resources: [
-    {
-      resources: ["src/dashboard/index.html", "src/editor/index.html"],
-      matches: ["<all_urls>"]
-    }
-  ]
+  }
 };
 
 const distDir = join(process.cwd(), 'dist');

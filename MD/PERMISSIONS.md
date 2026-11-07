@@ -1,56 +1,57 @@
 # Permissions & Privacy Justification
 
-> Needed for the Chrome Web Store review process. Also useful as an internal check that no permission is requested without a clear reason.
+> Needed for the Chrome Web Store review process. Also an internal check that no permission is requested without a clear reason.
 
 ## Chrome Extension Permissions
 
 | Permission | Why it's needed | Scope discipline |
 |---|---|---|
-| `identity` | Google OAuth login via Chrome Identity API | Only used to obtain a Drive-scoped token |
-| `tabCapture` | Capture the active browser tab via `captureVisibleTab(windowId)` | Only triggered by explicit user action (Full Screen button) |
-| `desktopCapture` | Capture full screen / application window | Only triggered by explicit user action |
-| `storage` | Chrome Storage API for settings, auth tokens, editor state | No sensitive data stored beyond non-secret preferences |
-| `activeTab` | Inject the area-selection overlay content script | Limited to the tab the user is actively interacting with |
-| `scripting` | Programmatically inject content script via `chrome.scripting.executeScript` (MV3 requirement) | Only injected on explicit capture request (Select Area button) |
-| `downloads` | Save files to user's local Downloads folder | Only triggered by explicit user download action |
+| `identity` | Google OAuth login via Chrome Identity API | Only used to obtain a `drive.file` token |
+| `activeTab` | Capture the visible tab (`captureVisibleTab`) and inject the area-selection script into the tab the user is on | Granted only when the user opens the Pramana popup on that tab |
+| `scripting` | Inject the area-selection script with `chrome.scripting.executeScript` | Only on the Select Area click; no content script is declared in the manifest |
+| `tabCapture` | Record the current tab | Only on the Record Tab click |
+| `offscreen` | Keep a tab recording running after the popup closes | Document exists only while recording |
+| `storage` | Auth state, the screenshot waiting in the editor, recording state, the mic preference | No browsing data is stored |
 
-**Explicitly not requested:** `<all_urls>` host permissions for content reading, background page access to browsing history, or any permission that would allow reading page content unrelated to the capture overlay.
+Host permission: `https://www.googleapis.com/*` only, to call the Drive API.
+
+Screen recording uses the standard web share picker (`getDisplayMedia`) in a Pramana window and needs no extension permission.
+
+**Explicitly not requested:** `desktopCapture`, `<all_urls>` or any broad host access, declared content scripts on every page, `downloads` (downloads use a normal link from the Library page), history, tabs content reading.
 
 ## Google OAuth Scope
 
 | Scope | Why |
 |---|---|
-| `https://www.googleapis.com/auth/drive.file` | Grants access **only** to files/folders the app itself creates or that the user explicitly opens with Pramana — structurally prevents browsing the user's full Drive |
+| `https://www.googleapis.com/auth/drive.file` | Access **only** to files and folders Pramana itself created. Structurally prevents browsing the user's Drive |
 
-**Explicitly not requested:** `drive.readonly` or full `drive` scope — would allow listing/reading the entire Drive, unnecessary and against the core privacy principle.
+**Explicitly not requested:** `drive.readonly` or full `drive`.
 
 ## Chrome Web Store Permission Justification
 
 > Use this text in the Chrome Web Store submission form.
 
-**Why does the extension need each permission?**
+- **`identity`**: Signs the user in with Google so Pramana can save captures to the user's own Google Drive.
+- **`activeTab`**: When the user opens Pramana on a tab and clicks a capture button, Pramana takes a screenshot of that tab or shows the area-selection overlay on it.
+- **`scripting`**: Injects the area-selection overlay and editor into the current tab when the user clicks Select Area. Nothing is injected otherwise.
+- **`tabCapture`**: Records the current tab when the user clicks Record Tab.
+- **`offscreen`**: Runs the tab recorder in a hidden extension document so a recording continues after the popup closes.
+- **`storage`**: Keeps sign-in state, a screenshot that is open in the editor, the in-progress recording state, and the microphone preference.
 
-- **`identity`**: Required for Google OAuth 2.0 login. Pramana uses the user's own Google Drive for storage — this permission enables the Chrome Identity API to authenticate without handling raw OAuth redirects.
+## Microphone
 
-- **`tabCapture`**: Required to capture the active browser tab as a screenshot via `captureVisibleTab(windowId)`. Only triggered when the user explicitly clicks the Full Screen capture button.
+Only requested when the user turns on "Include microphone". Chrome asks once on a Pramana page; the recorder then mixes the mic into recordings. If access is blocked, recordings continue without voice and the user is told.
 
-- **`desktopCapture`**: Required to capture the full screen or an application window. Only triggered when the user explicitly clicks the capture button.
+## Sharing
 
-- **`storage`**: Required to persist user preferences, auth tokens, and session state across browser restarts. Stores only non-sensitive settings and cached data.
-
-- **`activeTab`**: Required to inject the area-selection overlay into the current tab when the user chooses area-select capture mode. Limited to the tab the user is actively interacting with.
-
-- **`scripting`**: Required in Manifest V3 to programmatically inject the content script for area selection via `chrome.scripting.executeScript`. Only injected on explicit capture request, not persistently.
-
-- **`downloads`**: Required to save files to the user's local Downloads folder when they click the Download button in the dashboard. Only triggered by explicit user action.
+"Share link" makes a single file viewable by anyone with its link (Drive `anyone` reader permission). It is off by default, shown with a "Shared" badge, and can be turned off with "Stop sharing".
 
 ## Data Handling Summary
 
-- No data leaves the user's browser + their own Google Drive — there is no Pramana server
-- No analytics/telemetry collection — Chrome Web Store provides built-in metrics
+- No data leaves the user's browser and their own Google Drive; there is no Pramana server
+- No analytics or telemetry
 - No data is shared with third parties
+- Deleting a file moves it to the user's Drive trash, where it can be restored
 - Uninstalling the extension does not delete the user's Drive files
-- OAuth token handled exclusively by Chrome Identity API — never logged or stored in plain text
-- Content scripts only run when explicitly triggered by user action
-- File preview uses base64 data URLs fetched through background (Drive API requires auth headers)
-- Test suite uses mocked Chrome APIs — no real auth or Drive calls during testing
+- The Google token is only handed to Pramana's own extension pages, never to scripts running in web pages
+- Test suite uses mocked Chrome APIs and a fake Drive, with no real auth or Drive calls

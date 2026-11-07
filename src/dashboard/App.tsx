@@ -1,105 +1,123 @@
 /// <reference types="chrome" />
 
-import { useState, useEffect } from 'react';
-import { formatBytes } from '../shared/utils';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPageDriveClient } from '../shared/drive';
+import type { DriveFile, StorageQuota } from '../shared/drive';
+import { getPendingRecording } from '../shared/recordingStore';
+import type { PendingRecording } from '../shared/recordingStore';
+import { StorageMeter } from '../shared/StorageMeter';
+import { FileCard } from './FileCard';
+import { PreviewModal } from './PreviewModal';
+import { RecordingReview } from './RecordingReview';
+import { MicPermission } from './MicPermission';
 
-interface FileItem {
-  id: string;
-  name: string;
-  mimeType: string;
-  size: string;
-  createdTime: string;
-  folder: string;
-}
+const drive = createPageDriveClient();
 
 const FOLDERS = ['All', 'Screenshots', 'Recordings', 'Other'] as const;
 
+const SORTS = {
+  newest: { label: 'Newest first', compare: (a: DriveFile, b: DriveFile) => b.createdTime.localeCompare(a.createdTime) },
+  oldest: { label: 'Oldest first', compare: (a: DriveFile, b: DriveFile) => a.createdTime.localeCompare(b.createdTime) },
+  name: { label: 'Name', compare: (a: DriveFile, b: DriveFile) => a.name.localeCompare(b.name) },
+  size: { label: 'Largest first', compare: (a: DriveFile, b: DriveFile) => Number(b.size || 0) - Number(a.size || 0) },
+} as const;
+
+type SortKey = keyof typeof SORTS;
+type AuthState = 'checking' | 'signedOut' | 'signedIn';
+
+const loadImage = (fileId: string) => drive.fetchBlob(fileId);
+
 function App() {
-  const [files, setFiles] = useState<FileItem[]>([]);
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('grant') === 'microphone') return <MicPermission />;
+  return <Library />;
+}
+
+function Library() {
+  const [auth, setAuth] = useState<AuthState>('checking');
+  const [signingIn, setSigningIn] = useState(false);
+  const [files, setFiles] = useState<DriveFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeFolder, setActiveFolder] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [storageInfo, setStorageInfo] = useState<{ usage: number; limit: number } | null>(null);
-  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('newest');
+  const [quota, setQuota] = useState<StorageQuota | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
 
-  useEffect(() => {
-    loadFiles();
-    checkStorageQuota();
+  const loadFiles = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setFiles(await drive.listFiles());
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
+    drive.getQuota().then(setQuota).catch(() => {});
   }, []);
 
-  const loadFiles = async () => {
-    setLoading(true);
-    chrome.runtime.sendMessage({ type: 'LIST_FILES' }, (response) => {
-      if (response?.success) {
-        setFiles(response.files || []);
-      }
-      setLoading(false);
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'AUTH_STATUS' }, (response) => {
+      setAuth(response?.signedIn ? 'signedIn' : 'signedOut');
+    });
+    getPendingRecording()
+      .then(setPendingRecording)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (auth === 'signedIn') loadFiles();
+  }, [auth, loadFiles]);
+
+  const signIn = () => {
+    setSigningIn(true);
+    chrome.runtime.sendMessage({ type: 'AUTH_REQUEST', payload: { type: 'LOGIN' } }, (response) => {
+      setSigningIn(false);
+      if (response?.success) setAuth('signedIn');
+      else setLoadError(response?.error || 'Sign in failed');
     });
   };
 
-  const checkStorageQuota = async () => {
-    chrome.runtime.sendMessage({ type: 'CHECK_STORAGE_QUOTA' }, (response) => {
-      if (response?.success) {
-        setStorageInfo({ usage: response.usage, limit: response.limit });
-      }
-    });
-  };
+  const visibleFiles = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return files
+      .filter((f) => (activeFolder === 'All' || f.folder === activeFolder) && f.name.toLowerCase().includes(query))
+      .sort(SORTS[sort].compare);
+  }, [files, activeFolder, searchQuery, sort]);
 
+  const folderCount = (folder: string) => (folder === 'All' ? files.length : files.filter((f) => f.folder === folder).length);
+  const previewFile = files.find((f) => f.id === previewId) || null;
 
+  const updateFile = (id: string, changes: Partial<DriveFile>) =>
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...changes } : f)));
 
-  const filteredFiles = files.filter((file) => {
-    const matchesFolder = activeFolder === 'All' || file.folder === activeFolder;
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFolder && matchesSearch;
-  });
+  if (auth === 'checking') {
+    return <div className="dashboard-container loading">Loading…</div>;
+  }
 
-  const folderCounts = (folder: string) => {
-    if (folder === 'All') return files.length;
-    return files.filter((f) => f.folder === folder).length;
-  };
-
-  const handlePreview = async (file: FileItem) => {
-    setPreviewFile(file);
-    setPreviewUrl(null);
-    if (file.mimeType?.startsWith('image/')) {
-      chrome.runtime.sendMessage({ type: 'FETCH_FILE_DATA', payload: { fileId: file.id } }, (response) => {
-        if (response?.success) {
-          setPreviewUrl(`data:${response.mimeType};base64,${response.base64}`);
-        }
-      });
-    }
-  };
-
-  const handleDownload = (file: FileItem) => {
-    chrome.runtime.sendMessage({ type: 'DOWNLOAD_FILE', payload: { fileId: file.id, fileName: file.name } });
-  };
-
-  const handleDelete = (fileId: string) => {
-    if (confirm('Are you sure you want to delete this file?')) {
-      chrome.runtime.sendMessage({ type: 'DELETE_FILE', payload: { fileId } }, () => {
-        loadFiles();
-        setPreviewFile(null);
-        setPreviewUrl(null);
-      });
-    }
-  };
+  if (auth === 'signedOut') {
+    return (
+      <div className="dashboard-container centered-panel">
+        <h1>Pramana Library</h1>
+        <p>Sign in with Google to see the screenshots and recordings Pramana saved to your Drive.</p>
+        {loadError && <p className="error-message">{loadError}</p>}
+        <button className="btn-primary" onClick={signIn} disabled={signingIn}>
+          {signingIn ? 'Signing in…' : 'Sign in with Google'}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>Pramana Library</h1>
-        {storageInfo && (
-          <div className="storage-bar">
-            <div className="storage-text">
-              Drive: {formatBytes(storageInfo.usage)} / {formatBytes(storageInfo.limit)}
-            </div>
-            <div className="storage-progress">
-              <div
-                className="storage-fill"
-                style={{ width: `${(storageInfo.usage / storageInfo.limit) * 100}%` }}
-              />
-            </div>
+        {quota && (
+          <div className="dashboard-storage">
+            <StorageMeter quota={quota} />
           </div>
         )}
       </header>
@@ -112,6 +130,16 @@ function App() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="search-input"
         />
+        <select className="sort-select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort files">
+          {Object.entries(SORTS).map(([key, { label }]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button className="btn-ghost" onClick={loadFiles} disabled={loading}>
+          Refresh
+        </button>
       </div>
 
       <div className="folder-tabs">
@@ -122,70 +150,55 @@ function App() {
             onClick={() => setActiveFolder(folder)}
           >
             {folder}
-            <span className="folder-count">{folderCounts(folder)}</span>
+            <span className="folder-count">{folderCount(folder)}</span>
           </button>
         ))}
       </div>
 
       {loading ? (
         <div className="loading">Loading files...</div>
-      ) : filteredFiles.length === 0 ? (
+      ) : loadError ? (
         <div className="empty-state">
-          <p>No files found. Capture something to get started!</p>
+          <p className="error-message">Could not load your files: {loadError}</p>
+          <button className="btn-primary" onClick={loadFiles}>
+            Try again
+          </button>
+        </div>
+      ) : visibleFiles.length === 0 ? (
+        <div className="empty-state">
+          <p>{files.length === 0 ? 'No files yet. Capture something to get started!' : 'No files match your search.'}</p>
         </div>
       ) : (
         <div className="file-grid">
-          {filteredFiles.map((file) => (
-            <div key={file.id} className="file-card" onClick={() => handlePreview(file)}>
-              <div className="file-preview">
-                {file.mimeType?.startsWith('image/') ? (
-                  <img src={`chrome-extension://${chrome.runtime.id}/icons/icon128.png`} alt={file.name} />
-                ) : (
-                  <div className="video-placeholder">🎬</div>
-                )}
-              </div>
-              <div className="file-info">
-                <h3>{file.name}</h3>
-                <p className="file-meta">{formatBytes(Number(file.size || 0))} · {new Date(file.createdTime).toLocaleDateString()}</p>
-              </div>
-              <div className="file-folder-badge">{file.folder}</div>
-            </div>
+          {visibleFiles.map((file) => (
+            <FileCard key={file.id} file={file} loadImage={loadImage} onClick={() => setPreviewId(file.id)} />
           ))}
         </div>
       )}
 
       {previewFile && (
-        <div className="preview-overlay" onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}>
-          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="preview-header">
-              <h2>{previewFile.name}</h2>
-              <button className="preview-close" onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}>✕</button>
-            </div>
-            <div className="preview-content">
-              {previewFile.mimeType?.startsWith('image/') ? (
-                previewUrl ? (
-                  <img src={previewUrl} alt={previewFile.name} className="preview-image" />
-                ) : (
-                  <div className="preview-loading">Loading preview...</div>
-                )
-              ) : (
-                <div className="preview-video-placeholder">
-                  <p>🎬 Video Recording</p>
-                  <p className="preview-meta">{previewFile.name}</p>
-                </div>
-              )}
-            </div>
-            <div className="preview-details">
-              <span>📁 {previewFile.folder}</span>
-              <span>📏 {formatBytes(Number(previewFile.size || 0))}</span>
-              <span>📅 {new Date(previewFile.createdTime).toLocaleDateString()}</span>
-            </div>
-            <div className="preview-actions">
-              <button className="btn-primary" onClick={() => handleDownload(previewFile)}>Download</button>
-              <button className="btn-danger" onClick={() => handleDelete(previewFile.id)}>Delete</button>
-            </div>
-          </div>
-        </div>
+        <PreviewModal
+          key={previewFile.id}
+          file={previewFile}
+          drive={drive}
+          onUpdated={(changes) => updateFile(previewFile.id, changes)}
+          onTrashed={() => {
+            setFiles((prev) => prev.filter((f) => f.id !== previewFile.id));
+            setPreviewId(null);
+          }}
+          onClose={() => setPreviewId(null)}
+        />
+      )}
+
+      {pendingRecording && (
+        <RecordingReview
+          recording={pendingRecording}
+          drive={drive}
+          onDone={(saved) => {
+            setPendingRecording(null);
+            if (saved) loadFiles();
+          }}
+        />
       )}
     </div>
   );

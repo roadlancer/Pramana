@@ -74,28 +74,28 @@ pnpm test:coverage
 
 Then in Chrome: `chrome://extensions` → enable Developer Mode → **Load unpacked** → select the `dist/` folder.
 
-**Note:** After reloading the extension, you must **refresh the page** you want to capture for the content script to re-inject. Only two capture buttons: **Full Screen** and **Select Area**.
+Copy `.env.example` to `.env` and set `VITE_GOOGLE_CLIENT_ID` before building; `scripts/generate-manifest.js` writes it into `dist/manifest.json`.
 
 ---
 
 ## Project Status
 
-**Active development — core features working, test suite in place.**
+**MVP feature-complete; next step is the Chrome Web Store release (Phase 9).**
 
 | Feature | Status |
 |---|---|
-| Google OAuth login | Working |
-| Full Screen capture (via captureVisibleTab, no picker) | Working |
-| Select Area capture (scripting.executeScript + sendResponse) | Working |
-| DPR-aware area crop (no black layer) | Working |
-| Inline editor with tools (object-based, select/move/delete) | Working |
-| Full-page editor with shared module | Working |
-| Upload to Google Drive | Working |
-| Drive folder/subfolder management | Working |
-| Screen recording | Working |
-| Dashboard / file library with folder tabs | Working |
-| File preview (base64 via background auth) | Working |
-| File download (via chrome.downloads) | Working |
-| Test suite (59 tests, all passing) | Working |
+| Google sign-in (`drive.file` scope only), token refresh after expiry | Working |
+| Visible Tab capture → preview → save or edit | Working |
+| Select Area capture (on-demand injection, Escape to cancel) | Working |
+| One object-based editor for both the page modal and the editor tab: 9 tools incl. Select, inline text, strong blur, undo/redo, shortcuts | Working |
+| Editor keeps the screenshot across a refresh | Working |
+| Tab recording in an offscreen document (keeps going after the popup closes and when you switch tabs), tab audio, optional microphone, 10-minute limit, recorded at the tab's own size | Working |
+| Screen/window/tab recording: Chrome's share picker opens straight away on Entire screen | Working |
+| Recording format: MP4 (default) or WebM, chosen in the popup | Working |
+| Recording review in the Library before saving; resumable upload with progress | Working |
+| Library: thumbnails, search, folder tabs, sort, image/video preview, rename, download, move to Drive trash | Working |
+| Share link (anyone with the link), copy link, stop sharing, open in Drive | Working |
+| Sign-in prompt and error/retry states in the Library; unlimited-storage accounts | Working |
+| Tests: 162 unit/integration/component tests + headless end-to-end run of the built extension | Working |
 
-See `ROADMAP.md` for detailed phase tracking.
+See `ROADMAP.md` for phase tracking and `TESTING.md` for how to run the tests.
