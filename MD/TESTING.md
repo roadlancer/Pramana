@@ -76,6 +76,8 @@ These need a real signed-in Chrome profile and Google account:
 
 ## CI Pipeline
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every push and pull request: install, lint, typecheck, unit tests,
+[`ci/github-actions-ci.yml`](../ci/github-actions-ci.yml) is a ready GitHub Actions workflow. To switch it on, add it on GitHub as
+`.github/workflows/ci.yml` (GitHub web UI: **Add file → Create new file**, paste it). It is kept outside `.github/` because pushing
+workflow files needs a token with the `workflow` scope. Once on, it runs on every push and pull request: install, lint, typecheck, unit tests,
 then the end-to-end run in Playwright's Chromium. CI builds with `.env.example`'s placeholder OAuth client, which is enough because
 Google is faked in the end-to-end run.
